@@ -133,11 +133,11 @@ function update(_time, delta) {
   g.strokePath();
 
   // move and draw projectiles
-  updateProjectiles(dt);
+  updateProjectiles(dt, _time);
 
-  // players as stick figures
-  drawStick(g, p1.x, p1.y, p1.size, p1.color);
-  drawStick(g, p2.x, p2.y, p2.size, p2.color);
+  // players as stick figures (with immunity blink)
+  drawStick(g, p1.x, p1.y, p1.size, getPlayerColor(p1, _time));
+  drawStick(g, p2.x, p2.y, p2.size, getPlayerColor(p2, _time));
 
   // Position pattern UI above players
   positionUI(p1);
@@ -309,7 +309,7 @@ function createProjectile(side, dir) {
   return { x, y, vx, vy, dir, side, color, ps: 8 };
 }
 
-function updateProjectiles(dt) {
+function updateProjectiles(dt, now) {
   const halfX = 400;
   const drawArrow = (proj) => {
     const ps = proj.ps; // pixel size
@@ -335,7 +335,7 @@ function updateProjectiles(dt) {
       // collision with target player
       const target = side === 'L' ? p1 : p2;
       if (isHit(p, target)) {
-        onPlayerHit(target);
+        onPlayerHit(target, now);
         arr.splice(i, 1);
         continue;
       }
@@ -358,6 +358,19 @@ function isHit(proj, player) {
 }
 
 function onPlayerHit(player) {
+  // placeholder to keep signature (overloaded below)
+}
+
+function onPlayerHit(player, now) {
+  if (player.immuneUntil && now < player.immuneUntil) return;
   player.score = Math.max(0, (player.score || 0) - 1);
   player.scoreText.setText(String(player.score));
+  player.immuneUntil = now + 1000; // 1s immunity
+}
+
+function getPlayerColor(player, now) {
+  if (player.immuneUntil && now < player.immuneUntil) {
+    return (Math.floor(now / 120) % 2 === 0) ? player.color : 0x666666;
+  }
+  return player.color;
 }
