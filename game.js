@@ -71,6 +71,80 @@ const FIRE_B = [
   [0,1,0,1,0]
 ];
 
+// Pixel digit masks (3x5)
+const DIGITS = {
+  '0': [
+    [1,1,1],
+    [1,0,1],
+    [1,0,1],
+    [1,0,1],
+    [1,1,1]
+  ],
+  '1': [
+    [0,1,0],
+    [1,1,0],
+    [0,1,0],
+    [0,1,0],
+    [1,1,1]
+  ],
+  '2': [
+    [1,1,1],
+    [0,0,1],
+    [1,1,1],
+    [1,0,0],
+    [1,1,1]
+  ],
+  '3': [
+    [1,1,1],
+    [0,0,1],
+    [0,1,1],
+    [0,0,1],
+    [1,1,1]
+  ],
+  '4': [
+    [1,0,1],
+    [1,0,1],
+    [1,1,1],
+    [0,0,1],
+    [0,0,1]
+  ],
+  '5': [
+    [1,1,1],
+    [1,0,0],
+    [1,1,1],
+    [0,0,1],
+    [1,1,1]
+  ],
+  '6': [
+    [1,1,1],
+    [1,0,0],
+    [1,1,1],
+    [1,0,1],
+    [1,1,1]
+  ],
+  '7': [
+    [1,1,1],
+    [0,0,1],
+    [0,1,0],
+    [0,1,0],
+    [0,1,0]
+  ],
+  '8': [
+    [1,1,1],
+    [1,0,1],
+    [1,1,1],
+    [1,0,1],
+    [1,1,1]
+  ],
+  '9': [
+    [1,1,1],
+    [1,0,1],
+    [1,1,1],
+    [0,0,1],
+    [1,1,1]
+  ]
+};
+
 function create() {
   g = this.add.graphics();
 
@@ -82,11 +156,7 @@ function create() {
     right: Phaser.Input.Keyboard.KeyCodes.D
   });
 
-  this.add.text(400, 24, 'P1: WASD   |   P2: Arrow Keys', {
-    fontSize: '18px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
-  }).setOrigin(0.5, 0);
+  // Removed on-screen control instructions for cleaner HUD
 
   // Pattern & score UI
   initPlayerUI(this, p1, 'L');
@@ -199,7 +269,7 @@ function drawStick(gr, x, y, s, color) {
 }
 
 // Pixel person mask (8 x 13) - Player 1
-const PERSON_MASK = [
+const PERSON_MASK2 = [
   [0,0,1,1,1,1,1,0],
   [0,1,1,1,1,1,1,1],
   [0,0,1,1,1,1,1,0],
@@ -216,7 +286,7 @@ const PERSON_MASK = [
 ];
 
 // Pixel person mask variant - Player 2
-const PERSON_MASK2 = [
+const PERSON_MASK = [
   [0,1,1,1,1,1,0,0],
   [1,1,1,1,1,1,1,0],
   [0,1,1,1,1,1,0,0],
@@ -249,6 +319,28 @@ function drawPixelPerson(gr, x, y, s, color, mask) {
   }
 }
 
+function drawScore(player) {
+  const gfx = player.scoreGfx;
+  gfx.clear();
+  const text = String(player.score || 0);
+  const ps = 5;
+  const gap = 2;
+  const digitW = 3 * ps;
+  const totalW = text.length * digitW + (text.length - 1) * gap;
+  let x = player.scoreAlignRight ? (player.scoreAnchor.x - totalW) : player.scoreAnchor.x;
+  const y = player.scoreAnchor.y;
+  gfx.fillStyle(0xffff66, 1);
+  for (let i = 0; i < text.length; i++) {
+    const d = DIGITS[text[i]];
+    for (let r = 0; r < d.length; r++) {
+      for (let c = 0; c < d[r].length; c++) {
+        if (d[r][c]) gfx.fillRect(x + c * ps, y + r * ps, ps, ps);
+      }
+    }
+    x += digitW + gap;
+  }
+}
+
 function initPlayerUI(scene, player, side) {
   player.score = 0;
   player.progress = 0;
@@ -259,17 +351,10 @@ function initPlayerUI(scene, player, side) {
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
   }).setOrigin(0.5, 1);
-  player.progressText = scene.add.text(0, 0, '', {
-    fontSize: '14px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#aaaaaa'
-  }).setOrigin(0.5, 1);
   player.patternGfx = scene.add.graphics();
-  player.scoreText = scene.add.text(side === 'L' ? 16 : 784, 16, '0', {
-    fontSize: '22px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffff66'
-  }).setOrigin(side === 'L' ? 0 : 1, 0);
+  player.scoreGfx = scene.add.graphics();
+  player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
+  player.scoreAlignRight = side === 'R';
   // fixed positions at the top of each half
   positionUI(player);
   refreshPatternTexts(player);
@@ -287,8 +372,7 @@ function refreshPatternTexts(player) {
   const idx = player.progress;
   // Redraw pixel arrows
   drawPatternUI(player);
-  player.progressText.setText((idx) + '/' + pat.length);
-  player.scoreText.setText(String(player.score));
+  drawScore(player);
 }
 
 function tryStep(player, dir) {
@@ -308,42 +392,52 @@ function tryStep(player, dir) {
     player.progress = 0;
   }
   refreshPatternTexts(player);
+  drawScore(player);
 }
 
 function positionUI(player) {
   const centerX = player.side === 'L' ? 200 : 600;
   const patY = 56;
-  const progY = 28;
   player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
-  player.progressText.setPosition(centerX, progY);
   player.patternAnchor = { x: centerX, y: patY };
   drawPatternUI(player);
+  drawScore(player);
 }
 
 function drawPatternUI(player) {
-  const ps = 6; // pixel size for UI arrows
+  const basePs = 6; // pixel size for UI arrows (normal)
   const gap = 8; // spacing between arrows
   const arrows = player.pattern;
   const idx = player.progress;
   const gfx = player.patternGfx;
   gfx.clear();
   const masks = { U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R };
-  // compute total width
-  const aw = ARROW_U[0].length * ps;
-  const totalW = arrows.length * aw + (arrows.length - 1) * gap;
+  const arrowW = ARROW_U[0].length;
+  const arrowH = ARROW_U.length;
+  const aw = arrowW * basePs;
+  const aw2 = arrowW * basePs * 2; // current arrow width when scaled 2x
+  // compute total width with one arrow possibly 2x
+  let totalW = 0;
+  for (let i = 0; i < arrows.length; i++) totalW += (i === idx ? aw2 : aw);
+  totalW += (arrows.length - 1) * gap;
   let x0 = Math.floor(player.patternAnchor.x - totalW / 2);
-  const y0 = Math.floor(player.patternAnchor.y - (ARROW_U.length * ps) / 2);
   for (let i = 0; i < arrows.length; i++) {
     const dir = arrows[i];
     const mask = masks[dir];
-    const color = i === idx ? 0x00ff66 : 0xcccccc; // flecha actual en verde
+    const isCurrent = i === idx;
+    const ps = isCurrent ? basePs * 2 : basePs;
+    const y0 = Math.floor(player.patternAnchor.y - (arrowH * ps) / 2);
+    let color;
+    if (i < idx) color = 0x777777; // passed -> gray
+    else if (isCurrent) color = 0x00ff66; // current -> green, larger
+    else color = 0xffffff; // upcoming -> white
     gfx.fillStyle(color, 1);
     for (let r = 0; r < mask.length; r++) {
       for (let c = 0; c < mask[r].length; c++) {
         if (mask[r][c]) gfx.fillRect(x0 + c * ps, y0 + r * ps, ps, ps);
       }
     }
-    x0 += aw + gap;
+    x0 += (isCurrent ? aw2 : aw) + gap;
   }
 }
 
@@ -450,7 +544,7 @@ function onPlayerHit(player) {
 function onPlayerHit(player, now, dmg = 1) {
   if (player.immuneUntil && now < player.immuneUntil) return;
   player.score = Math.max(0, (player.score || 0) - dmg);
-  player.scoreText.setText(String(player.score));
+  drawScore(player);
   player.immuneUntil = now + 1000; // 1s immunity
 }
 
