@@ -24,6 +24,7 @@ let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
 let shield = null; // {x,y,ps}
 let nextShieldAt = 0; // ms timestamp
+let timerGfx; // pixel timer display
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -142,11 +143,19 @@ const DIGITS = {
     [1,1,1],
     [0,0,1],
     [1,1,1]
+  ],
+  ':': [
+    [0],
+    [1],
+    [0],
+    [1],
+    [0]
   ]
 };
 
 function create() {
   g = this.add.graphics();
+  timerGfx = this.add.graphics();
 
   cursors = this.input.keyboard.createCursorKeys();
   wasd = this.input.keyboard.addKeys({
@@ -226,6 +235,9 @@ function update(_time, delta) {
   // shield power-up
   updateShield(_time);
 
+  // timer
+  drawTimer(_time);
+
   // players as pixel people (with immunity blink)
   drawPixelPerson(g, p1.x, p1.y, p1.size, getPlayerColor(p1, _time), PERSON_MASK);
   drawPixelPerson(g, p2.x, p2.y, p2.size, getPlayerColor(p2, _time), PERSON_MASK2);
@@ -269,15 +281,15 @@ function drawStick(gr, x, y, s, color) {
 }
 
 // Pixel person mask (8 x 13) - Player 1
-const PERSON_MASK2 = [
+const PERSON_MASK = [
   [0,0,1,1,1,1,1,0],
   [0,1,1,1,1,1,1,1],
   [0,0,1,1,1,1,1,0],
   [0,0,0,0,1,0,0,0],
   [0,1,0,1,1,1,0,1],
   [0,1,0,0,1,0,0,1],
-  [0,0,0,0,1,0,0,0],
-  [0,0,0,0,1,0,0,0],
+  [0,0,0,1,1,1,0,0],
+  [0,0,1,0,1,0,1,0],
   [0,1,0,1,1,1,0,1],
   [0,1,0,0,1,0,0,1],
   [0,1,0,0,0,0,0,1],
@@ -286,7 +298,7 @@ const PERSON_MASK2 = [
 ];
 
 // Pixel person mask variant - Player 2
-const PERSON_MASK = [
+const PERSON_MASK2 = [
   [0,1,1,1,1,1,0,0],
   [1,1,1,1,1,1,1,0],
   [0,1,1,1,1,1,0,0],
@@ -339,6 +351,38 @@ function drawScore(player) {
     }
     x += digitW + gap;
   }
+}
+
+function drawDigitsCentered(gfx, cx, y, text, color, ps, gap) {
+  gfx.fillStyle(color, 1);
+  // compute total width
+  let totalW = 0;
+  for (let i = 0; i < text.length; i++) {
+    const d = DIGITS[text[i]];
+    const w = d[0].length * ps;
+    totalW += w;
+    if (i < text.length - 1) totalW += gap;
+  }
+  let x = Math.floor(cx - totalW / 2);
+  for (let i = 0; i < text.length; i++) {
+    const d = DIGITS[text[i]];
+    for (let r = 0; r < d.length; r++) {
+      for (let c = 0; c < d[r].length; c++) {
+        if (d[r][c]) gfx.fillRect(x + c * ps, y + r * ps, ps, ps);
+      }
+    }
+    x += d[0].length * ps + gap;
+  }
+}
+
+function drawTimer(now) {
+  if (!timerGfx) return;
+  timerGfx.clear();
+  const elapsed = Math.floor(now / 1000);
+  const mm = Math.floor(elapsed / 60);
+  const ss = elapsed % 60;
+  const text = String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  drawDigitsCentered(timerGfx, 400, 10, text, 0xffffff, 5, 2);
 }
 
 function initPlayerUI(scene, player, side) {
