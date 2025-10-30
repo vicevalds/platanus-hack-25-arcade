@@ -22,6 +22,8 @@ let speed = 220; // px/s
 const DIRS = ['U','R','D','L'];
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
+let shield = null; // {x,y,ps}
+let nextShieldAt = 0; // ms timestamp
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -134,6 +136,9 @@ function update(_time, delta) {
 
   // move and draw projectiles
   updateProjectiles(dt, _time);
+
+  // shield power-up
+  updateShield(_time);
 
   // players as stick figures (with immunity blink)
   drawStick(g, p1.x, p1.y, p1.size, getPlayerColor(p1, _time));
@@ -373,4 +378,65 @@ function getPlayerColor(player, now) {
     return (Math.floor(now / 120) % 2 === 0) ? player.color : 0x666666;
   }
   return player.color;
+}
+
+function updateShield(now) {
+  // schedule spawn if none
+  if (!shield && (nextShieldAt === 0 || now >= nextShieldAt)) {
+    spawnShield();
+  }
+  // draw and check pickup
+  if (shield) {
+    const ps = shield.ps;
+    const mask = [
+      [0,1,1,1,0,1,0],
+      [1,1,0,0,1,1,1],
+      [1,0,1,1,0,1,1],
+      [1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1],
+      [0,1,1,1,1,1,0],
+      [0,0,1,1,1,0,0]
+    ];
+    const w = mask[0].length * ps;
+    const h = mask.length * ps;
+    const sx = Math.floor(shield.x - w / 2);
+    const sy = Math.floor(shield.y - h / 2);
+    g.fillStyle(0x00d1ff, 1);
+    for (let r = 0; r < mask.length; r++) {
+      for (let c = 0; c < mask[r].length; c++) {
+        if (mask[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+
+    // pickup check
+    if (distSq(p1.x, p1.y, shield.x, shield.y) <= (p1.size + 10) * (p1.size + 10)) {
+      grantImmunity(p1, 3000, now);
+      shield = null; scheduleNextShield(now);
+    } else if (distSq(p2.x, p2.y, shield.x, shield.y) <= (p2.size + 10) * (p2.size + 10)) {
+      grantImmunity(p2, 3000, now);
+      shield = null; scheduleNextShield(now);
+    }
+  }
+}
+
+function spawnShield() {
+  const margin = 20;
+  const x = margin + Math.random() * (800 - margin * 2);
+  const y = margin + Math.random() * (600 - margin * 2);
+  shield = { x, y, ps: 5 };
+}
+
+function scheduleNextShield(now) {
+  // respawn in 2..5 seconds aleatorio
+  nextShieldAt = now + (2000 + Math.random() * 3000);
+}
+
+function grantImmunity(player, ms, now) {
+  if (player.immuneUntil && now < player.immuneUntil) player.immuneUntil += ms;
+  else player.immuneUntil = now + ms;
+}
+
+function distSq(ax, ay, bx, by) {
+  const dx = ax - bx, dy = ay - by;
+  return dx * dx + dy * dy;
 }
