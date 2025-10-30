@@ -55,6 +55,22 @@ const ARROW_L = [
   [0,0,1,0,0]
 ];
 
+// Fireball masks (two frames for simple animation)
+const FIRE_A = [
+  [0,0,1,0,0],
+  [0,1,1,1,0],
+  [1,1,1,1,1],
+  [0,1,1,1,0],
+  [0,0,1,0,0]
+];
+const FIRE_B = [
+  [0,1,0,1,0],
+  [1,1,1,1,1],
+  [0,1,1,1,0],
+  [1,1,1,1,1],
+  [0,1,0,1,0]
+];
+
 function create() {
   g = this.add.graphics();
 
@@ -182,21 +198,21 @@ function drawStick(gr, x, y, s, color) {
   gr.strokePath();
 }
 
-// Pixel person mask (7 x 13) - Player 1
+// Pixel person mask (8 x 13) - Player 1
 const PERSON_MASK = [
-  [0,1,1,1,1,1,0],
-  [1,1,1,1,1,1,1],
-  [0,1,1,1,1,1,0],
-  [0,0,0,1,0,0,0],
-  [1,0,1,1,1,0,1],
-  [1,0,0,1,0,0,1],
-  [0,0,0,1,0,0,0],
-  [0,0,0,1,0,0,0],
-  [1,0,1,1,1,0,1],
-  [1,0,0,1,0,0,1],
-  [1,0,0,0,0,0,1],
-  [1,0,0,0,0,0,1],
-  [0,1,0,0,0,1,0]
+  [0,0,1,1,1,1,1,0],
+  [0,1,1,1,1,1,1,1],
+  [0,0,1,1,1,1,1,0],
+  [0,0,0,0,1,0,0,0],
+  [0,1,0,1,1,1,0,1],
+  [0,1,0,0,1,0,0,1],
+  [0,0,0,0,1,0,0,0],
+  [0,0,0,0,1,0,0,0],
+  [0,1,0,1,1,1,0,1],
+  [0,1,0,0,1,0,0,1],
+  [0,1,0,0,0,0,0,1],
+  [0,1,0,0,0,0,0,1],
+  [0,0,1,0,0,0,1,0]
 ];
 
 // Pixel person mask variant - Player 2
@@ -335,7 +351,15 @@ function spawnAttackPattern(targetSide, pattern) {
   const arr = targetSide === 'L' ? projL : projR;
   for (let i = 0; i < pattern.length; i++) {
     const d = pattern[i];
-    arr.push(createProjectile(targetSide, d));
+    const p = createProjectile(targetSide, d);
+    // low probability fireball that deals 2 points and animates
+    if (Math.random() < 0.15) {
+      p.type = 'fire';
+      p.dmg = 2;
+      p.color = 0xff6a00; // fiery orange
+      p.ps = 10;
+    }
+    arr.push(p);
   }
 }
 
@@ -362,14 +386,20 @@ function createProjectile(side, dir) {
       case 'L': x = halfX + 16; y = margin + Math.random() * (600 - margin * 2); vx = -baseSpeed; vy = 0; break;
     }
   }
-  return { x, y, vx, vy, dir, side, color, ps: 8 };
+  return { x, y, vx, vy, dir, side, color, ps: 8, type: 'arrow', dmg: 1 };
 }
 
 function updateProjectiles(dt, now) {
   const halfX = 400;
   const drawArrow = (proj) => {
     const ps = proj.ps; // pixel size
-    const mask = proj.dir === 'U' ? ARROW_U : proj.dir === 'D' ? ARROW_D : proj.dir === 'R' ? ARROW_R : ARROW_L;
+    let mask;
+    if (proj.type === 'fire') {
+      const frame = (Math.floor(now / 120) % 2) === 0 ? FIRE_A : FIRE_B;
+      mask = frame;
+    } else {
+      mask = proj.dir === 'U' ? ARROW_U : proj.dir === 'D' ? ARROW_D : proj.dir === 'R' ? ARROW_R : ARROW_L;
+    }
     const w = mask[0].length * ps;
     const h = mask.length * ps;
     const sx = Math.floor(proj.x - w / 2);
@@ -391,7 +421,7 @@ function updateProjectiles(dt, now) {
       // collision with target player
       const target = side === 'L' ? p1 : p2;
       if (isHit(p, target)) {
-        onPlayerHit(target, now);
+        onPlayerHit(target, now, p.dmg || 1);
         arr.splice(i, 1);
         continue;
       }
@@ -417,9 +447,9 @@ function onPlayerHit(player) {
   // placeholder to keep signature (overloaded below)
 }
 
-function onPlayerHit(player, now) {
+function onPlayerHit(player, now, dmg = 1) {
   if (player.immuneUntil && now < player.immuneUntil) return;
-  player.score = Math.max(0, (player.score || 0) - 1);
+  player.score = Math.max(0, (player.score || 0) - dmg);
   player.scoreText.setText(String(player.score));
   player.immuneUntil = now + 1000; // 1s immunity
 }
