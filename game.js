@@ -103,6 +103,54 @@ const FIRE_B = [
   [0,1,0,1,0]
 ];
 
+// Bone masks (two frames for animation) - P2 normal attack
+const BONE_A = [
+  [0,1,1,1,0],
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [0,1,1,1,0]
+];
+const BONE_B = [
+  [0,0,0,0,0],
+  [1,0,0,0,1],
+  [1,1,1,1,1],
+  [1,0,0,0,1],
+  [0,0,0,0,0]
+];
+
+// Stone ball masks (two frames for animation) - P2 double damage
+const STONE_A = [
+  [0,1,1,1,0],
+  [1,1,1,1,1],
+  [1,1,1,1,1],
+  [1,1,1,1,1],
+  [0,1,1,1,0]
+];
+const STONE_B = [
+  [0,1,1,1,0],
+  [1,1,0,1,1],
+  [1,0,1,1,1],
+  [1,1,1,0,1],
+  [0,1,1,1,0]
+];
+
+// Star masks (two frames for animation) - P1 double damage
+const STAR_A = [
+  [0,0,1,0,0],
+  [0,1,1,1,0],
+  [1,1,1,1,1],
+  [0,1,1,1,0],
+  [0,1,0,1,0]
+];
+const STAR_B = [
+  [0,1,0,1,0],
+  [0,0,1,0,0],
+  [1,1,1,1,1],
+  [0,0,1,0,0],
+  [0,1,0,1,0]
+];
+
 // Pixel digit masks (3x5)
 const DIGITS = {
   '0': [
@@ -574,7 +622,7 @@ function tryStep(player, input) {
       player.score++;
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
-      spawnAttackPattern(player === p1 ? 'R' : 'L', completed);
+      spawnAttackPattern(player === p1 ? 'R' : 'L', completed, player);
       player.pattern = makePattern();
       player.progress = 0;
     }
@@ -635,8 +683,10 @@ function drawPatternUI(player) {
   }
 }
 
-function spawnAttackPattern(targetSide, pattern) {
+function spawnAttackPattern(targetSide, pattern, attacker) {
   const arr = targetSide === 'L' ? projL : projR;
+  const isP1 = (attacker === p1);
+  
   for (let i = 0; i < pattern.length; i++) {
     let d = pattern[i];
     // Convert buttons to their mapped directions
@@ -651,12 +701,32 @@ function spawnAttackPattern(targetSide, pattern) {
     // Only spawn projectiles for movement directions
     if (DIRS.includes(d)) {
       const p = createProjectile(targetSide, d);
-      // low probability fireball that deals 2 points and animates
+      
+      // 15% probability for double damage attack
       if (Math.random() < 0.15) {
-        p.type = 'fire';
         p.dmg = 2;
-        p.color = 0xff6a00; // fiery orange
         p.ps = 10;
+        if (isP1) {
+          // P1 (mago): star
+          p.type = 'star';
+          p.color = 0xffff00; // yellow star
+        } else {
+          // P2 (skeleton): stone ball
+          p.type = 'stone';
+          p.color = 0x666666; // gray stone
+        }
+      } else {
+        // Normal attacks
+        p.ps = 8;
+        if (isP1) {
+          // P1 (mago): fireball
+          p.type = 'fire';
+          p.color = 0xff6a00; // fiery orange
+        } else {
+          // P2 (skeleton): bone
+          p.type = 'bone';
+          p.color = 0xeeeeee; // white bone
+        }
       }
       arr.push(p);
     }
@@ -691,15 +761,30 @@ function createProjectile(side, dir) {
 
 function updateProjectiles(dt, now) {
   const halfX = 400;
-  const drawArrow = (proj) => {
+  const drawProjectile = (proj) => {
     const ps = proj.ps; // pixel size
     let mask;
-    if (proj.type === 'fire') {
-      const frame = (Math.floor(now / 120) % 2) === 0 ? FIRE_A : FIRE_B;
-      mask = frame;
-    } else {
-      mask = proj.dir === 'U' ? ARROW_U : proj.dir === 'D' ? ARROW_D : proj.dir === 'R' ? ARROW_R : ARROW_L;
+    const frame = (Math.floor(now / 120) % 2) === 0;
+    
+    // Select mask based on projectile type (all animated)
+    switch (proj.type) {
+      case 'fire':
+        mask = frame ? FIRE_A : FIRE_B;
+        break;
+      case 'bone':
+        mask = frame ? BONE_A : BONE_B;
+        break;
+      case 'stone':
+        mask = frame ? STONE_A : STONE_B;
+        break;
+      case 'star':
+        mask = frame ? STAR_A : STAR_B;
+        break;
+      default:
+        // Fallback to arrows (shouldn't happen)
+        mask = proj.dir === 'U' ? ARROW_U : proj.dir === 'D' ? ARROW_D : proj.dir === 'R' ? ARROW_R : ARROW_L;
     }
+    
     const w = mask[0].length * ps;
     const h = mask.length * ps;
     const sx = Math.floor(proj.x - w / 2);
@@ -717,7 +802,7 @@ function updateProjectiles(dt, now) {
       const p = arr[i];
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      drawArrow(p);
+      drawProjectile(p);
       // collision with target player
       const target = side === 'L' ? p1 : p2;
       if (isHit(p, target)) {
