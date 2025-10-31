@@ -19,7 +19,7 @@ let p1 = { x: 200, y: 350, size: 24, color: 0x8899ff }; // Initial position in p
 let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in playable area
 let cursors;
 let wasd;
-let speed = 220; // px/s
+let speed = 320; // px/s (increased from 220 for faster movement)
 const TOP_UI_HEIGHT = 150; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
 const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
@@ -440,7 +440,7 @@ function update(_time, delta) {
     currentRound = Math.floor(elapsedSeconds / 30) + 1;
     
     // Base health drain rate increases with each round
-    const baseHealthDrainRate = 15; // health per second (increased from 8)
+    const baseHealthDrainRate = 20; // health per second (increased for faster depletion)
     const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
@@ -1134,7 +1134,7 @@ function onPlayerHit(player, now, dmg = 1) {
   
   // Reduce both score and health
   player.score = Math.max(0, (player.score || 0) - dmg);
-  player.health = Math.max(0, (player.health || 0) - (dmg * 5)); // 5 health per damage point
+  player.health = Math.max(0, (player.health || 0) - (dmg * 15)); // 15 health per damage point (increased from 5 for more damage)
   
   drawScore(player);
   drawHealthBar(player);
@@ -1343,7 +1343,7 @@ function updateShield(now) {
   if (!shield) {
     if (nextShieldAt === 0) {
       // set an initial delay so it doesn't appear immediately
-      nextShieldAt = now + (10000 + Math.random() * 10000); // 10..20s
+      nextShieldAt = now + (10000 + Math.random() * 15000); // 10..25s initial spawn
     } else if (now >= nextShieldAt) {
       spawnShield();
     }
@@ -1391,10 +1391,10 @@ function updateShield(now) {
 
     // pickup check
     if (distSq(p1.x, p1.y, shield.x, shield.y) <= (p1.size + 10) * (p1.size + 10)) {
-      grantImmunity(p1, 3000, now);
+      grantImmunity(p1, 3000, now); // 3 seconds immunity
       shield = null; scheduleNextShield(now);
     } else if (distSq(p2.x, p2.y, shield.x, shield.y) <= (p2.size + 10) * (p2.size + 10)) {
-      grantImmunity(p2, 3000, now);
+      grantImmunity(p2, 3000, now); // 3 seconds immunity
       shield = null; scheduleNextShield(now);
     }
   }
@@ -1409,8 +1409,8 @@ function spawnShield() {
 }
 
 function scheduleNextShield(now) {
-  // respawn in 10..20 seconds aleatorio (raro)
-  nextShieldAt = now + (10000 + Math.random() * 10000);
+  // respawn in 10..25 seconds after pickup (minimum 10 seconds to allow immunity to expire)
+  nextShieldAt = now + (10000 + Math.random() * 15000);
 }
 
 function grantImmunity(player, ms, now) {
