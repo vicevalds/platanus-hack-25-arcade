@@ -19,7 +19,7 @@ let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in p
 let cursors;
 let wasd;
 let speed = 220; // px/s
-const TOP_UI_HEIGHT = 130; // Height of black top section (non-playable area) - "barra datos"
+const TOP_UI_HEIGHT = 150; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
 const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
 // Button to direction mapping (for attacks)
@@ -39,6 +39,8 @@ let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
 let gameOverText = null; // game over message text
 let sceneRef = null; // reference to the scene
 let menuUI = null; // menu UI elements
+let gameStartTime = 0; // timestamp when game started
+let currentRound = 1; // current round number
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -235,6 +237,13 @@ const DIGITS = {
     [0],
     [1],
     [0]
+  ],
+  'R': [
+    [1,1,1],
+    [1,0,1],
+    [1,1,1],
+    [1,1,0],
+    [1,0,1]
   ]
 };
 
@@ -413,7 +422,7 @@ function update(_time, delta) {
 
   // Animate game over texts (pulsate)
   if (gameState === 'gameOver' && gameOverText) {
-    const scale = 1 + Math.sin(_time / 200) * 0.3; // pulsate between 0.7 and 1.3
+    const scale = 1 + Math.sin(_time / 200) * 0.1; // pulsate between 0.9 and 1.1
     if (gameOverText.winnerText) gameOverText.winnerText.setScale(scale);
     if (gameOverText.loserText) gameOverText.loserText.setScale(scale);
   }
@@ -423,7 +432,15 @@ function update(_time, delta) {
 
   // Health drain over time (if playing)
   if (gameState === 'playing') {
-    const healthDrainRate = 8; // health per second
+    // Calculate current round based on elapsed time (30 seconds per round)
+    const elapsedSeconds = (_time - gameStartTime) / 1000;
+    currentRound = Math.floor(elapsedSeconds / 30) + 1;
+    
+    // Base health drain rate increases with each round
+    const baseHealthDrainRate = 15; // health per second (increased from 8)
+    const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
+    const healthDrainRate = baseHealthDrainRate * roundMultiplier;
+    
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * dt);
     p2.health = Math.max(0, (p2.health || 0) - healthDrainRate * dt);
     
@@ -751,11 +768,19 @@ function drawDigitsCentered(gfx, cx, y, text, color, ps, gap) {
 function drawTimer(now) {
   if (!timerGfx) return;
   timerGfx.clear();
-  const elapsed = Math.floor(now / 1000);
+  
+  // Draw round number above timer
+  if (gameState === 'playing') {
+    const roundText = 'R' + String(currentRound);
+    drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
+  }
+  
+  // Draw timer below round
+  const elapsed = Math.floor((now - gameStartTime) / 1000);
   const mm = Math.floor(elapsed / 60);
   const ss = elapsed % 60;
   const text = String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
-  drawDigitsCentered(timerGfx, 400, 10, text, 0xffffff, 5, 2);
+  drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
 }
 
 function initPlayerUI(scene, player, side) {
@@ -814,8 +839,9 @@ function tryStep(player, input) {
     player.progress++;
     if (player.progress >= player.pattern.length) {
       player.score++;
-      // Recover health when completing pattern
-      player.health = Math.min(player.maxHealth, (player.health || 0) + 15);
+      // Recover health when completing pattern (proportional to pattern length)
+      const healthRecovery = player.pattern.length * 5; // 5 health per pattern step
+      player.health = Math.min(player.maxHealth, (player.health || 0) + healthRecovery);
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
       spawnAttackPattern(player === p1 ? 'R' : 'L', completed, player);
@@ -832,8 +858,8 @@ function tryStep(player, input) {
 function positionUI(player) {
   // Position at top of player's box (aesthetic, outside playable zone)
   // Health bar at top, pattern below it (more separation)
-  const healthY = 30; // health bar position (top of screen)
-  const patY = 90; // pattern below health bar (adjusted for larger barra datos)
+  const healthY = 35; // health bar position (top of screen)
+  const patY = 105; // pattern below health bar (adjusted for larger barra datos)
   const centerX = player.side === 'L' ? 200 : 600;
   
   player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
@@ -855,8 +881,8 @@ function drawHealthBar(player) {
   
   const x = player.healthAnchor.x;
   const y = player.healthAnchor.y;
-  const barWidth = 150;
-  const barHeight = 14; // thicker for better visibility
+  const barWidth = 250; // increased from 150
+  const barHeight = 16; // increased for better visibility
   const healthPercent = Math.max(0, Math.min(1, player.health / player.maxHealth));
   
   // Black background (extended for visibility)
@@ -1122,7 +1148,7 @@ function endGame(winner, loser) {
   overlay.setDepth(2000);
   
   // Winner message
-  const winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 250, 'GANÓ', {
+  const winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 250, 'Winner', {
     fontSize: '64px',
     fontFamily: 'Arial',
     color: '#00ff00',
@@ -1130,7 +1156,7 @@ function endGame(winner, loser) {
   }).setOrigin(0.5).setDepth(2001);
   
   // Loser message
-  const loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 250, 'GAME OVER', {
+  const loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 250, 'Loser', {
     fontSize: '64px',
     fontFamily: 'Arial',
     color: '#ff0000',
@@ -1208,6 +1234,8 @@ function startGame() {
   
   // Reset game state
   gameState = 'playing';
+  gameStartTime = sceneRef.time.now; // Reset timer
+  currentRound = 1; // Reset round
   p1.health = p1.maxHealth;
   p2.health = p2.maxHealth;
   p1.score = 0;
@@ -1255,8 +1283,12 @@ function restartGame() {
     gameOverText = null;
   }
   
+  // Change state to 'playing' to start the game immediately
+  gameState = 'playing';
+  gameStartTime = sceneRef.time.now; // Reset timer
+  currentRound = 1; // Reset round
+  
   // Reset all game state for a fresh start
-  gameState = 'menu';
   p1.health = p1.maxHealth;
   p2.health = p2.maxHealth;
   p1.score = 0;
@@ -1278,8 +1310,18 @@ function restartGame() {
   p2.x = 600;
   p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
   
-  // Show menu (UI will be refreshed when game starts)
-  showMenu();
+  // Position UI and refresh - ensure anchors are set first, then draw everything
+  positionUI(p1);
+  positionUI(p2);
+  // Now explicitly draw everything since gameState is 'playing'
+  drawHealthBar(p1);
+  drawHealthBar(p2);
+  drawPatternUI(p1);
+  drawPatternUI(p2);
+  refreshPatternTexts(p1);
+  refreshPatternTexts(p2);
+  drawScore(p1);
+  drawScore(p2);
 }
 
 function getPlayerColor(player, now) {
