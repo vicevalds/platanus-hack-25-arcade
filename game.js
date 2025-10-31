@@ -20,6 +20,14 @@ let cursors;
 let wasd;
 let speed = 220; // px/s
 const DIRS = ['U','R','D','L'];
+const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
+// Button to direction mapping (for attacks)
+// A = Left, B = Up or Down (random), C = Right
+const BUTTON_TO_DIR = {
+  'A': 'L',  // Left button = Left
+  'C': 'R'   // Right button = Right
+  // B is handled specially to randomly pick Up or Down
+};
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
 let shield = null; // {x,y,ps}
@@ -54,6 +62,50 @@ const ARROW_L = [
   [1,1,1,1,1],
   [0,1,0,0,0],
   [0,0,1,0,0]
+];
+
+// Pixel button masks (5x5) for arcade buttons
+const BUTTON_A = [
+  [1,0,0,0,0],
+  [1,0,0,0,0],
+  [1,1,1,1,1],
+  [1,0,0,0,0],
+  [1,0,0,0,0]
+];
+const BUTTON_B = [
+  [1,1,1,1,1],
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [0,0,1,0,0]
+];
+const BUTTON_C = [
+  [0,0,0,0,1],
+  [0,0,0,0,1],
+  [1,1,1,1,1],
+  [0,0,0,0,1],
+  [0,0,0,0,1]
+];
+const BUTTON_D = [
+  [1,0,0,0,0],
+  [1,0,0,0,0],
+  [1,1,1,1,1],
+  [1,0,0,0,0],
+  [1,0,0,0,0]
+];
+const BUTTON_E = [
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [0,0,1,0,0],
+  [1,1,1,1,1]
+];
+const BUTTON_F = [
+  [0,0,0,0,1],
+  [0,0,0,0,1],
+  [1,1,1,1,1],
+  [0,0,0,0,1],
+  [0,0,0,0,1]
 ];
 
 // Fireball masks (two frames for simple animation)
@@ -171,19 +223,17 @@ function create() {
   initPlayerUI(this, p1, 'L');
   initPlayerUI(this, p2, 'R');
 
-  // Input handling for pattern steps
+  // Input handling for pattern steps (only arcade buttons, not movement)
   this.input.keyboard.on('keydown', (ev) => {
     switch (ev.code) {
-      // P1 WASD
-      case 'KeyW': tryStep(p1, 'U'); break;
-      case 'KeyA': tryStep(p1, 'L'); break;
-      case 'KeyS': tryStep(p1, 'D'); break;
-      case 'KeyD': tryStep(p1, 'R'); break;
-      // P2 Arrows
-      case 'ArrowUp': tryStep(p2, 'U'); break;
-      case 'ArrowLeft': tryStep(p2, 'L'); break;
-      case 'ArrowDown': tryStep(p2, 'D'); break;
-      case 'ArrowRight': tryStep(p2, 'R'); break;
+      // P1 Arcade buttons (top 3: Z, X, C)
+      case 'KeyZ': tryStep(p1, 'A'); break; // Left button
+      case 'KeyX': tryStep(p1, 'B'); break; // Center button
+      case 'KeyC': tryStep(p1, 'C'); break; // Right button
+      // P2 Arcade buttons (top 3: Numpad 1, 2, 3)
+      case 'Numpad1': tryStep(p2, 'A'); break; // Left button
+      case 'Numpad2': tryStep(p2, 'B'); break; // Center button
+      case 'Numpad3': tryStep(p2, 'C'); break; // Right button
     }
   });
 }
@@ -238,9 +288,16 @@ function update(_time, delta) {
   // timer
   drawTimer(_time);
 
-  // players as pixel people (with immunity blink)
-  drawPixelPerson(g, p1.x, p1.y, p1.size, getPlayerColor(p1, _time), PERSON_MASK);
-  drawPixelPerson(g, p2.x, p2.y, p2.size, getPlayerColor(p2, _time), PERSON_MASK2);
+  // players as pixel people (with immunity blink) - three color boxes like banana
+  // P1 (mago): piel, azul, café
+  const p1Color = getPlayerColor(p1, _time);
+  const p1IsImmune = (p1.immuneUntil && _time < p1.immuneUntil);
+  const p1Blinking = p1IsImmune && (Math.floor(_time / 120) % 2 === 1);
+  const p1HeadColor = p1Blinking ? 0x666666 : 0xffdbac; // piel, o gris si inmune y parpadeando
+  const p1BodyColor = p1Blinking ? 0x666666 : 0x0066ff; // azul, o gris si inmune y parpadeando
+  const p1LegsColor = p1Blinking ? 0x666666 : 0x8b5a2b; // café, o gris si inmune y parpadeando
+  drawPixelPerson(g, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
+  drawPixelPerson(g, p2.x, p2.y, p2.size, getPlayerColor(p2, _time), PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS);
 
   // Position pattern UI above players
   positionUI(p1);
@@ -280,28 +337,73 @@ function drawStick(gr, x, y, s, color) {
   gr.strokePath();
 }
 
-// Pixel person mask (8 x 13) - Player 1
-const PERSON_MASK = [
+// Pixel person masks (8 x 13) - Player 1 (three separate color boxes)
+const PERSON_MASK_P1_HEAD = [
   [0,1,1,1,1,1,0,0],
   [1,1,1,1,1,1,1,0],
   [0,1,1,1,1,1,0,0],
-  [0,0,0,1,0,0,0,1],
-  [0,0,0,1,0,0,0,1],
-  [1,1,1,1,1,1,1,1],
-  [0,0,0,1,0,0,0,1],
-  [0,0,0,1,0,0,0,1],
-  [0,0,1,1,1,0,0,1],
-  [0,1,1,1,1,1,0,1],
-  [1,1,1,1,1,1,1,1],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [1,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0]
+];
+const PERSON_MASK_P1_BODY = [
+  [0,0,0,0,0,0,0,0],
+  [0,0,1,0,0,1,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,1,0,0,0,0],
+  [0,0,0,1,0,0,0,0],
+  [0,1,1,1,1,1,1,0],
+  [0,0,0,1,0,0,0,0],
+  [0,0,0,1,0,0,0,0],
+  [0,0,1,1,1,0,0,0],
+  [0,1,1,1,1,1,0,0],
+  [0,1,1,1,1,1,0,0],
+  [0,1,0,0,0,1,0,0],
+  [0,0,0,0,0,0,0,0]
+];
+const PERSON_MASK_P1_LEGS = [
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
+  [0,0,0,0,0,0,0,1],
   [0,0,1,0,1,0,0,1],
   [0,0,1,0,1,0,0,1]
 ];
 
-// Pixel person mask variant - Player 2
-const PERSON_MASK2 = [
+// Pixel person masks - Player 2 (three separate color boxes)
+const PERSON_MASK_P2_HEAD = [
   [0,1,1,1,1,1,0,0],
-  [1,1,1,1,1,1,1,0],
+  [1,0,1,1,0,1,1,0],
   [0,1,1,1,1,1,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0]
+];
+const PERSON_MASK_P2_BODY = [
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
   [0,0,0,1,0,0,0,0],
   [1,1,1,1,1,1,1,0],
   [1,0,0,1,0,0,1,0],
@@ -309,24 +411,73 @@ const PERSON_MASK2 = [
   [0,1,0,1,0,1,0,0],
   [1,0,1,1,1,0,1,0],
   [1,0,0,1,0,0,1,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0]
+];
+const PERSON_MASK_P2_LEGS = [
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
   [1,1,0,0,0,1,1,0],
   [0,1,0,0,0,1,0,0],
   [1,1,0,0,0,1,1,0]
 ];
 
-function drawPixelPerson(gr, x, y, s, color, mask) {
-  const cols = mask[0].length;
-  const rows = mask.length;
+function drawPixelPerson(gr, x, y, s, baseColor, maskHead, maskBody, maskLegs, colorHead, colorBody, colorLegs) {
+  const cols = maskHead[0].length;
+  const rows = maskHead.length;
   // Fit into approx 2*s box
   const ps = Math.max(2, Math.floor((s * 2) / cols));
   const w = cols * ps;
   const h = rows * ps;
   const sx = Math.floor(x - w / 2);
   const sy = Math.floor(y - h / 2);
-  gr.fillStyle(color, 1);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (mask[r][c]) gr.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+  
+  // Three separate color boxes (like banana)
+  // Use specific colors if provided, otherwise derive from baseColor
+  let color1, color2, color3;
+  if (colorHead !== undefined && colorBody !== undefined && colorLegs !== undefined) {
+    color1 = colorHead;
+    color2 = colorBody;
+    color3 = colorLegs;
+  } else {
+    const r = (baseColor >> 16) & 0xff;
+    const g = (baseColor >> 8) & 0xff;
+    const b = baseColor & 0xff;
+    color1 = ((Math.min(255, r + 40) << 16) | (Math.min(255, g + 40) << 8) | Math.min(255, b + 40));
+    color2 = baseColor;
+    color3 = ((Math.max(0, r - 40) << 16) | (Math.max(0, g - 40) << 8) | Math.max(0, b - 40));
+  }
+  
+  // Color 1: Head
+  gr.fillStyle(color1, 1);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (maskHead[row][col]) gr.fillRect(sx + col * ps, sy + row * ps, ps, ps);
+    }
+  }
+  
+  // Color 2: Body
+  gr.fillStyle(color2, 1);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (maskBody[row][col]) gr.fillRect(sx + col * ps, sy + row * ps, ps, ps);
+    }
+  }
+  
+  // Color 3: Legs
+  gr.fillStyle(color3, 1);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (maskLegs[row][col]) gr.fillRect(sx + col * ps, sy + row * ps, ps, ps);
     }
   }
 }
@@ -407,7 +558,10 @@ function initPlayerUI(scene, player, side) {
 function makePattern() {
   const len = 3 + Math.floor(Math.random() * 5); // 3..7
   const arr = [];
-  for (let i = 0; i < len; i++) arr.push(DIRS[(Math.random() * 4) | 0]);
+  for (let i = 0; i < len; i++) {
+    // Only use top 3 arcade buttons (A, B, C)
+    arr.push(ARCADE_BUTTONS[(Math.random() * 3) | 0]);
+  }
   return arr;
 }
 
@@ -419,10 +573,15 @@ function refreshPatternTexts(player) {
   drawScore(player);
 }
 
-function tryStep(player, dir) {
+function tryStep(player, input) {
   if (!player.pattern) return;
   const want = player.pattern[player.progress];
-  if (dir === want) {
+  
+  // Patterns only contain arcade buttons A, B, C
+  // Check if input matches the expected button
+  const matches = (input === want);
+  
+  if (matches) {
     player.progress++;
     if (player.progress >= player.pattern.length) {
       player.score++;
@@ -449,28 +608,32 @@ function positionUI(player) {
 }
 
 function drawPatternUI(player) {
-  const basePs = 6; // pixel size for UI arrows (normal)
-  const gap = 8; // spacing between arrows
-  const arrows = player.pattern;
+  const basePs = 6; // pixel size for UI buttons/arrows (normal)
+  const gap = 8; // spacing between buttons
+  const buttons = player.pattern;
   const idx = player.progress;
   const gfx = player.patternGfx;
   gfx.clear();
-  const masks = { U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R };
-  const arrowW = ARROW_U[0].length;
-  const arrowH = ARROW_U.length;
-  const aw = arrowW * basePs;
-  const aw2 = arrowW * basePs * 2; // current arrow width when scaled 2x
-  // compute total width with one arrow possibly 2x
+  const masks = {
+    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R,
+    A: BUTTON_A, B: BUTTON_B, C: BUTTON_C
+  };
+  const iconW = ARROW_U[0].length; // all icons are 5x5
+  const iconH = ARROW_U.length;
+  const aw = iconW * basePs;
+  const aw2 = iconW * basePs * 2; // current button width when scaled 2x
+  // compute total width with one button possibly 2x
   let totalW = 0;
-  for (let i = 0; i < arrows.length; i++) totalW += (i === idx ? aw2 : aw);
-  totalW += (arrows.length - 1) * gap;
+  for (let i = 0; i < buttons.length; i++) totalW += (i === idx ? aw2 : aw);
+  totalW += (buttons.length - 1) * gap;
   let x0 = Math.floor(player.patternAnchor.x - totalW / 2);
-  for (let i = 0; i < arrows.length; i++) {
-    const dir = arrows[i];
-    const mask = masks[dir];
+  for (let i = 0; i < buttons.length; i++) {
+    const btn = buttons[i];
+    const mask = masks[btn];
+    if (!mask) continue;
     const isCurrent = i === idx;
     const ps = isCurrent ? basePs * 2 : basePs;
-    const y0 = Math.floor(player.patternAnchor.y - (arrowH * ps) / 2);
+    const y0 = Math.floor(player.patternAnchor.y - (iconH * ps) / 2);
     let color;
     if (i < idx) color = 0x777777; // passed -> gray
     else if (isCurrent) color = 0x00ff66; // current -> green, larger
@@ -488,16 +651,28 @@ function drawPatternUI(player) {
 function spawnAttackPattern(targetSide, pattern) {
   const arr = targetSide === 'L' ? projL : projR;
   for (let i = 0; i < pattern.length; i++) {
-    const d = pattern[i];
-    const p = createProjectile(targetSide, d);
-    // low probability fireball that deals 2 points and animates
-    if (Math.random() < 0.15) {
-      p.type = 'fire';
-      p.dmg = 2;
-      p.color = 0xff6a00; // fiery orange
-      p.ps = 10;
+    let d = pattern[i];
+    // Convert buttons to their mapped directions
+    // A = Left, B = Up or Down (random), C = Right
+    if (d === 'A') {
+      d = 'L';
+    } else if (d === 'B') {
+      d = Math.random() < 0.5 ? 'U' : 'D'; // Random up or down
+    } else if (d === 'C') {
+      d = 'R';
     }
-    arr.push(p);
+    // Only spawn projectiles for movement directions
+    if (DIRS.includes(d)) {
+      const p = createProjectile(targetSide, d);
+      // low probability fireball that deals 2 points and animates
+      if (Math.random() < 0.15) {
+        p.type = 'fire';
+        p.dmg = 2;
+        p.color = 0xff6a00; // fiery orange
+        p.ps = 10;
+      }
+      arr.push(p);
+    }
   }
 }
 
@@ -614,25 +789,20 @@ function updateShield(now) {
     const ps = shield.ps;
     // Banana pixel art (two colors: peel yellow and stem brown)
     const bananaY = [
-      [0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,0,0,0,0,1,1,1,0,0],
-      [0,0,0,0,1,1,1,0,1,1,0],
-      [1,1,0,1,1,1,0,0,1,1,0],
-      [1,1,1,1,1,0,0,0,1,1,0],
-      [0,1,1,1,0,0,0,1,1,1,0],
-      [0,0,0,0,1,1,1,1,1,1,0],
-      [0,0,0,0,0,1,1,1,1,0,0]
+      [0,0,0,0,1,0,0],
+      [0,0,0,0,1,1,0],
+      [0,0,0,0,1,1,0],
+      [0,0,0,1,1,1,0],
+      [1,1,1,1,1,1,0],
+      [0,1,1,1,1,0,0]
     ];
     const bananaB = [
-      [0,0,0,0,0,0,1,1,0,0,0],
-      [0,0,0,0,0,1,1,1,1,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0]
-    ];
-    const w = bananaY[0].length * ps;
+      [0,0,0,0,1,0,0],
+      [0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,0]
+    ];0, w = bananaY[0].length * ps;
     const h = bananaY.length * ps;
     const sx = Math.floor(shield.x - w / 2);
     const sy = Math.floor(shield.y - h / 2);
