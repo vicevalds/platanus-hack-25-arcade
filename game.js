@@ -14,6 +14,7 @@ const config = {
 const game = new Phaser.Game(config);
 
 let g;
+let gPlayers; // graphics for players (rendered above UI)
 let p1 = { x: 200, y: 350, size: 24, color: 0x8899ff }; // Initial position in playable area
 let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in playable area
 let cursors;
@@ -250,7 +251,9 @@ const DIGITS = {
 function create() {
   sceneRef = this; // store scene reference
   g = this.add.graphics();
-  g.setDepth(100); // Main graphics below UI
+  g.setDepth(10); // Arena and background at lowest level
+  gPlayers = this.add.graphics();
+  gPlayers.setDepth(100); // Players above UI
   timerGfx = this.add.graphics();
   timerGfx.setDepth(1000); // Timer above everything
   
@@ -483,6 +486,7 @@ function update(_time, delta) {
 
   // Draw
   g.clear();
+  gPlayers.clear();
   
   // Draw background stars
   for (const star of stars) {
@@ -493,19 +497,19 @@ function update(_time, delta) {
   // Arena floor design
   drawArenaFloor(g, half);
   
-  // Draw shadow only for player 2 (skeleton)
+  // Draw shadow only for player 2 (skeleton) - on arena layer
   drawShadow(g, p2.x, p2.y, p2.size);
 
-  // move and draw projectiles
+  // move and draw projectiles (on arena layer)
   updateProjectiles(dt, _time);
 
-  // shield power-up
+  // shield power-up (on arena layer)
   updateShield(_time);
 
   // timer
   drawTimer(_time);
 
-  // players as pixel people (with immunity blink) - three color boxes like banana
+  // players as pixel people (with immunity blink) - drawn on player layer (above UI)
   // P1 (mago): piel, azul, café
   const p1Color = getPlayerColor(p1, _time);
   const p1IsImmune = (p1.immuneUntil && _time < p1.immuneUntil);
@@ -513,7 +517,7 @@ function update(_time, delta) {
   const p1HeadColor = p1Blinking ? 0x666666 : 0xffdbac; // piel, o gris si inmune y parpadeando
   const p1BodyColor = p1Blinking ? 0x666666 : 0x0066ff; // azul, o gris si inmune y parpadeando
   const p1LegsColor = p1Blinking ? 0x666666 : 0x8b5a2b; // café, o gris si inmune y parpadeando
-  drawPixelPerson(g, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
+  drawPixelPerson(gPlayers, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
   
   // P2: colores personalizados con cuerpo amarillo
   const p2Color = getPlayerColor(p2, _time);
@@ -522,7 +526,7 @@ function update(_time, delta) {
   const p2HeadColor = p2Blinking ? 0x666666 : 0xf0f0f0; // blanco/gris claro
   const p2BodyColor = p2Blinking ? 0x666666 : 0x8b5a2b; // amarillo
   const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
-  drawPixelPerson(g, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
+  drawPixelPerson(gPlayers, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
 
   // Position UI (always, so health bars are always visible when playing)
   if (gameState === 'playing') {
@@ -535,11 +539,13 @@ function update(_time, delta) {
     drawPatternUI(p1);
     drawPatternUI(p2);
   } else {
-    // Hide health bars and patterns when game is not playing
+    // Hide health bars, patterns, and scores when game is not playing
     p1.healthGfx.clear();
     p2.healthGfx.clear();
     p1.patternGfx.clear();
     p2.patternGfx.clear();
+    p1.scoreGfx.clear();
+    p2.scoreGfx.clear();
   }
 }
 
@@ -791,16 +797,16 @@ function initPlayerUI(scene, player, side) {
   player.maxHealth = 100;
   player.health = player.maxHealth;
   player.healthGfx = scene.add.graphics();
-  player.healthGfx.setDepth(1000); // Render above everything
+  player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
     fontSize: '18px',
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
   }).setOrigin(0.5, 1);
   player.patternGfx = scene.add.graphics();
-  player.patternGfx.setDepth(1000); // Render above everything
+  player.patternGfx.setDepth(50); // Above arena (10) but below players (100)
   player.scoreGfx = scene.add.graphics();
-  player.scoreGfx.setDepth(1000); // Render above everything
+  player.scoreGfx.setDepth(50); // Above arena (10) but below players (100)
   player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
   player.scoreAlignRight = side === 'R';
   // fixed positions at the top of each half
@@ -821,10 +827,12 @@ function makePattern() {
 function refreshPatternTexts(player) {
   const pat = player.pattern;
   const idx = player.progress;
-  // Redraw pixel arrows
-  drawHealthBar(player);
-  drawPatternUI(player);
-  drawScore(player);
+  // Redraw pixel arrows (only when playing)
+  if (gameState === 'playing') {
+    drawHealthBar(player);
+    drawPatternUI(player);
+    drawScore(player);
+  }
 }
 
 function tryStep(player, input) {
@@ -857,18 +865,17 @@ function tryStep(player, input) {
 
 function positionUI(player) {
   // Position at top of player's box (aesthetic, outside playable zone)
-  // Health bar at top, pattern below it (more separation)
+  // Health bar at top, pattern below it (closer spacing)
   const healthY = 35; // health bar position (top of screen)
-  const patY = 105; // pattern below health bar (adjusted for larger barra datos)
+  const patY = 90; // pattern below health bar
   const centerX = player.side === 'L' ? 200 : 600;
   
   player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
   player.patternAnchor = { x: centerX, y: patY };
   player.healthAnchor = { x: centerX, y: healthY };
-  // Always draw score
-  drawScore(player);
-  // Only draw health and pattern if playing
+  // Only draw score and health when playing
   if (gameState === 'playing') {
+    drawScore(player);
     drawHealthBar(player);
     drawPatternUI(player);
   }
@@ -882,7 +889,7 @@ function drawHealthBar(player) {
   const x = player.healthAnchor.x;
   const y = player.healthAnchor.y;
   const barWidth = 250; // increased from 150
-  const barHeight = 16; // increased for better visibility
+  const barHeight = 22; // increased for better visibility (more thickness)
   const healthPercent = Math.max(0, Math.min(1, player.health / player.maxHealth));
   
   // Black background (extended for visibility)
