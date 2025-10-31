@@ -21,13 +21,7 @@ let wasd;
 let speed = 220; // px/s
 const DIRS = ['U','R','D','L'];
 const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
-// Button to direction mapping (for attacks)
 // A = Left, B = Up or Down (random), C = Right
-const BUTTON_TO_DIR = {
-  'A': 'L',  // Left button = Left
-  'C': 'R'   // Right button = Right
-  // B is handled specially to randomly pick Up or Down
-};
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
 let shield = null; // {x,y,ps}
@@ -80,27 +74,6 @@ const BUTTON_B = [
   [0,0,1,0,0]
 ];
 const BUTTON_C = [
-  [0,0,0,0,1],
-  [0,0,0,0,1],
-  [1,1,1,1,1],
-  [0,0,0,0,1],
-  [0,0,0,0,1]
-];
-const BUTTON_D = [
-  [1,0,0,0,0],
-  [1,0,0,0,0],
-  [1,1,1,1,1],
-  [1,0,0,0,0],
-  [1,0,0,0,0]
-];
-const BUTTON_E = [
-  [0,0,1,0,0],
-  [0,0,1,0,0],
-  [0,0,1,0,0],
-  [0,0,1,0,0],
-  [1,1,1,1,1]
-];
-const BUTTON_F = [
   [0,0,0,0,1],
   [0,0,0,0,1],
   [1,1,1,1,1],
@@ -541,11 +514,6 @@ function initPlayerUI(scene, player, side) {
   player.progress = 0;
   player.pattern = makePattern();
   player.side = side;
-  player.patternText = scene.add.text(0, 0, '', {
-    fontSize: '18px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffffff'
-  }).setOrigin(0.5, 1);
   player.patternGfx = scene.add.graphics();
   player.scoreGfx = scene.add.graphics();
   player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
@@ -600,8 +568,7 @@ function tryStep(player, input) {
 
 function positionUI(player) {
   const centerX = player.side === 'L' ? 200 : 600;
-  const patY = 56;
-  player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
+  const patY = 50;
   player.patternAnchor = { x: centerX, y: patY };
   drawPatternUI(player);
   drawScore(player);
@@ -615,11 +582,10 @@ function drawPatternUI(player) {
   const gfx = player.patternGfx;
   gfx.clear();
   const masks = {
-    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R,
     A: BUTTON_A, B: BUTTON_B, C: BUTTON_C
   };
-  const iconW = ARROW_U[0].length; // all icons are 5x5
-  const iconH = ARROW_U.length;
+  const iconW = BUTTON_A[0].length; // all icons are 5x5
+  const iconH = BUTTON_A.length;
   const aw = iconW * basePs;
   const aw2 = iconW * basePs * 2; // current button width when scaled 2x
   // compute total width with one button possibly 2x
