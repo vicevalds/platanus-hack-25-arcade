@@ -19,7 +19,7 @@ let p1 = { x: 200, y: 350, size: 24, color: 0x8899ff }; // Initial position in p
 let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in playable area
 let cursors;
 let wasd;
-let speed = 320; // px/s (increased from 220 for faster movement)
+let speed = 440; // px/s (doubled for faster movement)
 const TOP_UI_HEIGHT = 150; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
 const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
@@ -440,7 +440,7 @@ function update(_time, delta) {
     currentRound = Math.floor(elapsedSeconds / 30) + 1;
     
     // Base health drain rate increases with each round
-    const baseHealthDrainRate = 20; // health per second (increased for faster depletion)
+    const baseHealthDrainRate = 30; // health per second (doubled for faster depletion)
     const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
@@ -815,7 +815,37 @@ function initPlayerUI(scene, player, side) {
 }
 
 function makePattern() {
-  const len = 3 + Math.floor(Math.random() * 5); // 3..7
+  let len;
+  const round = currentRound;
+  const rand = Math.random();
+  
+  if (round <= 6) {
+    // Rondas 1-6: 80% de 3 símbolos, 20% de 4 símbolos
+    if (rand < 0.80) {
+      len = 3;
+    } else {
+      len = 4;
+    }
+  } else if (round <= 12) {
+    // Rondas 7-12: 0% de 3, 30% de 4, 40% de 5, 30% de 6
+    if (rand < 0.30) {
+      len = 4;
+    } else if (rand < 0.70) {
+      len = 5;
+    } else {
+      len = 6;
+    }
+  } else {
+    // Rondas 13+: 0% de 3, 0% de 4, 30% de 5, 30% de 6, 40% de 7
+    if (rand < 0.30) {
+      len = 5;
+    } else if (rand < 0.60) {
+      len = 6;
+    } else {
+      len = 7;
+    }
+  }
+  
   const arr = [];
   for (let i = 0; i < len; i++) {
     // Only use top 3 arcade buttons (A, B, C)
@@ -1132,9 +1162,15 @@ function onPlayerHit(player, now, dmg = 1) {
   if (player.immuneUntil && now < player.immuneUntil) return;
   if (gameState !== 'playing') return;
   
+  // Progressive damage multiplier: increases by 0.1x per round
+  // Round 1: 1.0x, Round 2: 1.1x, Round 3: 1.2x, etc.
+  const roundMultiplier = 1.0 + (currentRound - 1) * 0.1;
+  const baseDamage = 22.5; // base damage per hit (reduced to half)
+  const finalDamage = dmg * baseDamage * roundMultiplier;
+  
   // Reduce both score and health
   player.score = Math.max(0, (player.score || 0) - dmg);
-  player.health = Math.max(0, (player.health || 0) - (dmg * 15)); // 15 health per damage point (increased from 5 for more damage)
+  player.health = Math.max(0, (player.health || 0) - finalDamage);
   
   drawScore(player);
   drawHealthBar(player);
