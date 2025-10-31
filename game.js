@@ -14,11 +14,12 @@ const config = {
 const game = new Phaser.Game(config);
 
 let g;
-let p1 = { x: 200, y: 300, size: 24, color: 0x8899ff };
-let p2 = { x: 600, y: 300, size: 24, color: 0xf0f0f0 };
+let p1 = { x: 200, y: 350, size: 24, color: 0x8899ff }; // Initial position in playable area
+let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in playable area
 let cursors;
 let wasd;
 let speed = 220; // px/s
+const TOP_UI_HEIGHT = 130; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
 const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
 // Button to direction mapping (for attacks)
@@ -34,6 +35,10 @@ let shield = null; // {x,y,ps}
 let nextShieldAt = 0; // ms timestamp
 let timerGfx; // pixel timer display
 let stars = []; // background stars
+let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
+let gameOverText = null; // game over message text
+let sceneRef = null; // reference to the scene
+let menuUI = null; // menu UI elements
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -234,14 +239,17 @@ const DIGITS = {
 };
 
 function create() {
+  sceneRef = this; // store scene reference
   g = this.add.graphics();
+  g.setDepth(100); // Main graphics below UI
   timerGfx = this.add.graphics();
+  timerGfx.setDepth(1000); // Timer above everything
   
-  // Create background stars
+  // Create background stars (only in playable area)
   for (let i = 0; i < 100; i++) {
     stars.push({
       x: Math.random() * 800,
-      y: Math.random() * 600,
+      y: TOP_UI_HEIGHT + Math.random() * (600 - TOP_UI_HEIGHT), // Only in playable area
       size: Math.random() < 0.7 ? 1 : 2, // most stars are small
       brightness: 0.3 + Math.random() * 0.7
     });
@@ -255,25 +263,44 @@ function create() {
     right: Phaser.Input.Keyboard.KeyCodes.D
   });
 
-  // Control instructions
-  this.add.text(100, 580, 'P1: WASD + ZXC', {
+  // Control instructions (hidden until game starts)
+  const p1Controls = this.add.text(100, 580, 'P1: WASD + ZXC', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#8899ff'
-  }).setOrigin(0.5);
+  }).setOrigin(0.5).setVisible(false).setName('controls');
   
-  this.add.text(700, 580, 'P2: Arrows + 123', {
+  const p2Controls = this.add.text(700, 580, 'P2: Arrows + 123', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#ffdd00'
-  }).setOrigin(0.5);
+  }).setOrigin(0.5).setVisible(false).setName('controls');
 
   // Pattern & score UI
   initPlayerUI(this, p1, 'L');
   initPlayerUI(this, p2, 'R');
 
+  // Show menu
+  showMenu();
+
   // Input handling for pattern steps (only arcade buttons, not movement)
   this.input.keyboard.on('keydown', (ev) => {
+    if (gameState === 'menu') {
+      // Start game with Space or Enter
+      if (ev.code === 'Space' || ev.code === 'Enter') {
+        startGame();
+        return;
+      }
+    } else if (gameState === 'gameOver') {
+      // Restart with Space or Enter
+      if (ev.code === 'Space' || ev.code === 'Enter') {
+        restartGame();
+        return;
+      }
+    }
+    
+    if (gameState !== 'playing') return;
+    
     switch (ev.code) {
       // P1 Arcade buttons (top 3: Z, X, C)
       case 'KeyZ': tryStep(p1, 'A'); break; // Left button
@@ -302,17 +329,25 @@ function drawShadow(gr, x, y, size) {
 }
 
 function drawArenaFloor(gr, halfX) {
+  // Top black section (non-playable area) - full width
+  gr.fillStyle(0x000000, 1);
+  gr.fillRect(0, 0, 800, TOP_UI_HEIGHT);
+  
+  // Horizontal divider line between top section and playable area
+  gr.fillStyle(0x66ccff, 1); // light cyan/blue
+  gr.fillRect(0, TOP_UI_HEIGHT - 2, 800, 4);
+  
   // Left side - Mago's arena (solid dark purple)
   gr.fillStyle(0x1a0f2e, 1);
-  gr.fillRect(0, 0, halfX, 600);
+  gr.fillRect(0, TOP_UI_HEIGHT, halfX, 600 - TOP_UI_HEIGHT);
   
   // Space-themed details for mago side (subtle)
   // Small cross-shaped stars (yellow)
   gr.fillStyle(0xffee88, 0.5); // light yellow
   const magoStars = [
-    [40, 120], [120, 80], [200, 180], [280, 250], [350, 150],
-    [80, 320], [180, 420], [300, 500], [250, 380], [150, 280],
-    [60, 480], [320, 90], [230, 540]
+    [40, 120 + TOP_UI_HEIGHT], [120, 80 + TOP_UI_HEIGHT], [200, 180 + TOP_UI_HEIGHT], [280, 250 + TOP_UI_HEIGHT], [350, 150 + TOP_UI_HEIGHT],
+    [80, 320 + TOP_UI_HEIGHT], [180, 420 + TOP_UI_HEIGHT], [300, 500 + TOP_UI_HEIGHT], [250, 380 + TOP_UI_HEIGHT], [150, 280 + TOP_UI_HEIGHT],
+    [60, 480 + TOP_UI_HEIGHT], [320, 90 + TOP_UI_HEIGHT], [230, 540 + TOP_UI_HEIGHT]
   ];
   for (const [x, y] of magoStars) {
     // Draw cross shape (5 pixels)
@@ -327,7 +362,7 @@ function drawArenaFloor(gr, halfX) {
   // Asteroids (small pixel rocks) - light brown
   gr.fillStyle(0x8b7355, 0.4); // light brown
   const asteroids = [
-    [100, 200], [240, 350], [340, 480], [70, 440], [300, 140]
+    [100, 200 + TOP_UI_HEIGHT], [240, 350 + TOP_UI_HEIGHT], [340, 480 + TOP_UI_HEIGHT], [70, 440 + TOP_UI_HEIGHT], [300, 140 + TOP_UI_HEIGHT]
   ];
   for (const [ax, ay] of asteroids) {
     // Draw small pixelated asteroid
@@ -338,14 +373,14 @@ function drawArenaFloor(gr, halfX) {
   
   // Right side - Skeleton's arena (solid brown earth color)
   gr.fillStyle(0x3d2817, 1); // darker earth brown
-  gr.fillRect(halfX, 0, halfX, 600);
+  gr.fillRect(halfX, TOP_UI_HEIGHT, halfX, 600 - TOP_UI_HEIGHT);
   
   // Earth-themed details for skeleton side (subtle)
   // Small grass patches
   gr.fillStyle(0x2d5016, 0.6); // dark green
   const grassPatches = [
-    [450, 140], [550, 240], [650, 180], [720, 320], [480, 380],
-    [620, 450], [740, 520], [520, 520], [680, 100], [580, 340]
+    [450, 140 + TOP_UI_HEIGHT], [550, 240 + TOP_UI_HEIGHT], [650, 180 + TOP_UI_HEIGHT], [720, 320 + TOP_UI_HEIGHT], [480, 380 + TOP_UI_HEIGHT],
+    [620, 450 + TOP_UI_HEIGHT], [740, 520 + TOP_UI_HEIGHT], [520, 520 + TOP_UI_HEIGHT], [680, 100 + TOP_UI_HEIGHT], [580, 340 + TOP_UI_HEIGHT]
   ];
   for (const [gx, gy] of grassPatches) {
     // Small grass patch (pixelated)
@@ -357,8 +392,8 @@ function drawArenaFloor(gr, halfX) {
   // Small bones scattered
   gr.fillStyle(0x8a7a6a, 0.5); // bone color
   const bonePositions = [
-    [470, 200], [590, 300], [710, 420], [530, 480], [660, 260],
-    [750, 150], [440, 540], [610, 90]
+    [470, 200 + TOP_UI_HEIGHT], [590, 300 + TOP_UI_HEIGHT], [710, 420 + TOP_UI_HEIGHT], [530, 480 + TOP_UI_HEIGHT], [660, 260 + TOP_UI_HEIGHT],
+    [750, 150 + TOP_UI_HEIGHT], [440, 540 + TOP_UI_HEIGHT], [610, 90 + TOP_UI_HEIGHT]
   ];
   for (const [bx, by] of bonePositions) {
     // Tiny bone shape (horizontal)
@@ -367,42 +402,67 @@ function drawArenaFloor(gr, halfX) {
     gr.fillRect(bx + 8, by, 3, 6);
   }
   
-  // Middle divider - solid cyan/light blue
+  // Middle divider - solid cyan/light blue (only in playable area)
   gr.fillStyle(0x66ccff, 1); // light cyan/blue
-  gr.fillRect(halfX - 2, 0, 4, 600);
+  gr.fillRect(halfX - 2, TOP_UI_HEIGHT, 4, 600 - TOP_UI_HEIGHT);
 }
 
 function update(_time, delta) {
   const dt = delta / 1000;
   const half = 400;
 
+  // Animate game over texts (pulsate)
+  if (gameState === 'gameOver' && gameOverText) {
+    const scale = 1 + Math.sin(_time / 200) * 0.3; // pulsate between 0.7 and 1.3
+    if (gameOverText.winnerText) gameOverText.winnerText.setScale(scale);
+    if (gameOverText.loserText) gameOverText.loserText.setScale(scale);
+  }
+
+  // Don't update game if in menu
+  if (gameState === 'menu') return;
+
+  // Health drain over time (if playing)
+  if (gameState === 'playing') {
+    const healthDrainRate = 8; // health per second
+    p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * dt);
+    p2.health = Math.max(0, (p2.health || 0) - healthDrainRate * dt);
+    
+    // Check for game over from health drain
+    if (p1.health <= 0) {
+      endGame(p2, p1);
+    } else if (p2.health <= 0) {
+      endGame(p1, p2);
+    }
+  }
+
   // Input P1 (WASD)
   let vx1 = 0, vy1 = 0;
-  if (wasd.left.isDown) vx1 -= 1;
-  if (wasd.right.isDown) vx1 += 1;
-  if (wasd.up.isDown) vy1 -= 1;
-  if (wasd.down.isDown) vy1 += 1;
+  if (gameState === 'playing' && wasd.left.isDown) vx1 -= 1;
+  if (gameState === 'playing' && wasd.right.isDown) vx1 += 1;
+  if (gameState === 'playing' && wasd.up.isDown) vy1 -= 1;
+  if (gameState === 'playing' && wasd.down.isDown) vy1 += 1;
   if (vx1 !== 0 && vy1 !== 0) { const s = Math.SQRT1_2; vx1 *= s; vy1 *= s; }
   p1.x += vx1 * speed * dt;
   p1.y += vy1 * speed * dt;
 
   // Input P2 (Arrows)
   let vx2 = 0, vy2 = 0;
-  if (cursors.left.isDown) vx2 -= 1;
-  if (cursors.right.isDown) vx2 += 1;
-  if (cursors.up.isDown) vy2 -= 1;
-  if (cursors.down.isDown) vy2 += 1;
+  if (gameState === 'playing' && cursors.left.isDown) vx2 -= 1;
+  if (gameState === 'playing' && cursors.right.isDown) vx2 += 1;
+  if (gameState === 'playing' && cursors.up.isDown) vy2 -= 1;
+  if (gameState === 'playing' && cursors.down.isDown) vy2 += 1;
   if (vx2 !== 0 && vy2 !== 0) { const s = Math.SQRT1_2; vx2 *= s; vy2 *= s; }
   p2.x += vx2 * speed * dt;
   p2.y += vy2 * speed * dt;
 
-  // Constrain to halves and screen
+  // Constrain to halves and screen (with top UI section limit)
   const m1 = p1.size;
   const m2 = p2.size;
+  const topLimit = TOP_UI_HEIGHT + m1; // Top limit: UI height + player size
   p1.x = Phaser.Math.Clamp(p1.x, m1, half - m1);
   p2.x = Phaser.Math.Clamp(p2.x, half + m2, 800 - m2);
-  p1.y = Phaser.Math.Clamp(p1.y, m1, 600 - m1);
-  p2.y = Phaser.Math.Clamp(p2.y, m2, 600 - m2);
+  p1.y = Phaser.Math.Clamp(p1.y, topLimit, 600 - m1);
+  p2.y = Phaser.Math.Clamp(p2.y, TOP_UI_HEIGHT + m2, 600 - m2);
 
   // Draw
   g.clear();
@@ -447,9 +507,23 @@ function update(_time, delta) {
   const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
   drawPixelPerson(g, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
 
-  // Position pattern UI above players
-  positionUI(p1);
-  positionUI(p2);
+  // Position UI (always, so health bars are always visible when playing)
+  if (gameState === 'playing') {
+    positionUI(p1);
+    positionUI(p2);
+    
+    // Update health bars and pattern UI (only show when playing)
+    drawHealthBar(p1);
+    drawHealthBar(p2);
+    drawPatternUI(p1);
+    drawPatternUI(p2);
+  } else {
+    // Hide health bars and patterns when game is not playing
+    p1.healthGfx.clear();
+    p2.healthGfx.clear();
+    p1.patternGfx.clear();
+    p2.patternGfx.clear();
+  }
 }
 
 function drawStick(gr, x, y, s, color) {
@@ -689,13 +763,19 @@ function initPlayerUI(scene, player, side) {
   player.progress = 0;
   player.pattern = makePattern();
   player.side = side;
+  player.maxHealth = 100;
+  player.health = player.maxHealth;
+  player.healthGfx = scene.add.graphics();
+  player.healthGfx.setDepth(1000); // Render above everything
   player.patternText = scene.add.text(0, 0, '', {
     fontSize: '18px',
     fontFamily: 'Arial, sans-serif',
     color: '#ffffff'
   }).setOrigin(0.5, 1);
   player.patternGfx = scene.add.graphics();
+  player.patternGfx.setDepth(1000); // Render above everything
   player.scoreGfx = scene.add.graphics();
+  player.scoreGfx.setDepth(1000); // Render above everything
   player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
   player.scoreAlignRight = side === 'R';
   // fixed positions at the top of each half
@@ -717,12 +797,13 @@ function refreshPatternTexts(player) {
   const pat = player.pattern;
   const idx = player.progress;
   // Redraw pixel arrows
+  drawHealthBar(player);
   drawPatternUI(player);
   drawScore(player);
 }
 
 function tryStep(player, input) {
-  if (!player.pattern) return;
+  if (!player.pattern || gameState !== 'playing') return;
   const want = player.pattern[player.progress];
   
   // Patterns only contain arcade buttons A, B, C
@@ -733,6 +814,8 @@ function tryStep(player, input) {
     player.progress++;
     if (player.progress >= player.pattern.length) {
       player.score++;
+      // Recover health when completing pattern
+      player.health = Math.min(player.maxHealth, (player.health || 0) + 15);
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
       spawnAttackPattern(player === p1 ? 'R' : 'L', completed, player);
@@ -747,21 +830,71 @@ function tryStep(player, input) {
 }
 
 function positionUI(player) {
+  // Position at top of player's box (aesthetic, outside playable zone)
+  // Health bar at top, pattern below it (more separation)
+  const healthY = 30; // health bar position (top of screen)
+  const patY = 90; // pattern below health bar (adjusted for larger barra datos)
   const centerX = player.side === 'L' ? 200 : 600;
-  const patY = 56;
+  
   player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
   player.patternAnchor = { x: centerX, y: patY };
-  drawPatternUI(player);
+  player.healthAnchor = { x: centerX, y: healthY };
+  // Always draw score
   drawScore(player);
+  // Only draw health and pattern if playing
+  if (gameState === 'playing') {
+    drawHealthBar(player);
+    drawPatternUI(player);
+  }
+}
+
+function drawHealthBar(player) {
+  const gfx = player.healthGfx;
+  gfx.clear();
+  if (!player.healthAnchor) return;
+  
+  const x = player.healthAnchor.x;
+  const y = player.healthAnchor.y;
+  const barWidth = 150;
+  const barHeight = 14; // thicker for better visibility
+  const healthPercent = Math.max(0, Math.min(1, player.health / player.maxHealth));
+  
+  // Black background (extended for visibility)
+  const bgPadding = 4;
+  gfx.fillStyle(0x000000, 1);
+  gfx.fillRect(x - barWidth / 2 - bgPadding, y - barHeight / 2 - bgPadding, barWidth + bgPadding * 2, barHeight + bgPadding * 2);
+  
+  // Background (dark red)
+  gfx.fillStyle(0x330000, 1);
+  gfx.fillRect(x - barWidth / 2, y - barHeight / 2, barWidth, barHeight);
+  
+  // Health fill (green to red gradient based on health)
+  let healthColor;
+  if (healthPercent > 0.6) {
+    healthColor = 0x00ff00; // green
+  } else if (healthPercent > 0.3) {
+    healthColor = 0xffff00; // yellow
+  } else {
+    healthColor = 0xff0000; // red
+  }
+  gfx.fillStyle(healthColor, 1);
+  gfx.fillRect(x - barWidth / 2, y - barHeight / 2, barWidth * healthPercent, barHeight);
+  
+  // Border (white pixelated)
+  gfx.lineStyle(2, 0xffffff, 1);
+  gfx.strokeRect(x - barWidth / 2, y - barHeight / 2, barWidth, barHeight);
 }
 
 function drawPatternUI(player) {
+  const gfx = player.patternGfx;
+  gfx.clear();
+  // Only show pattern when playing or when anchors are set
+  if (gameState !== 'playing' || !player.patternAnchor) return;
+  
   const basePs = 6; // pixel size for UI buttons/arrows (normal)
   const gap = 8; // spacing between buttons
   const buttons = player.pattern;
   const idx = player.progress;
-  const gfx = player.patternGfx;
-  gfx.clear();
   const masks = {
     U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R,
     A: BUTTON_A, B: BUTTON_B, C: BUTTON_C
@@ -774,6 +907,19 @@ function drawPatternUI(player) {
   let totalW = 0;
   for (let i = 0; i < buttons.length; i++) totalW += (i === idx ? aw2 : aw);
   totalW += (buttons.length - 1) * gap;
+  
+  // Draw black background for pattern
+  const bgPadding = 6;
+  const bgHeight = iconH * basePs * 2 + bgPadding * 2; // accommodate 2x size
+  const bgY = player.patternAnchor.y - bgHeight / 2;
+  gfx.fillStyle(0x000000, 1);
+  gfx.fillRect(
+    player.patternAnchor.x - totalW / 2 - bgPadding,
+    bgY,
+    totalW + bgPadding * 2,
+    bgHeight
+  );
+  
   let x0 = Math.floor(player.patternAnchor.x - totalW / 2);
   for (let i = 0; i < buttons.length; i++) {
     const btn = buttons[i];
@@ -851,22 +997,26 @@ function createProjectile(side, dir) {
   const margin = 12;
   const baseSpeed = 260;
   const color = 0xff2020; // intense red
+  // Playable area boundaries
+  const topBound = TOP_UI_HEIGHT;
+  const bottomBound = 600;
+  const playableHeight = bottomBound - topBound;
   let x = 0, y = 0, vx = 0, vy = 0;
   if (side === 'R') {
     // right half: x in [halfX, 800]
     switch (dir) {
-      case 'U': x = halfX + margin + Math.random() * (800 - halfX - margin * 2); y = 600 + 16; vx = 0; vy = -baseSpeed; break;
-      case 'D': x = halfX + margin + Math.random() * (800 - halfX - margin * 2); y = -16; vx = 0; vy = baseSpeed; break;
-      case 'R': x = halfX - 16; y = margin + Math.random() * (600 - margin * 2); vx = baseSpeed; vy = 0; break;
-      case 'L': x = 800 + 16; y = margin + Math.random() * (600 - margin * 2); vx = -baseSpeed; vy = 0; break;
+      case 'U': x = halfX + margin + Math.random() * (800 - halfX - margin * 2); y = bottomBound + 16; vx = 0; vy = -baseSpeed; break;
+      case 'D': x = halfX + margin + Math.random() * (800 - halfX - margin * 2); y = topBound - 16; vx = 0; vy = baseSpeed; break;
+      case 'R': x = halfX - 16; y = topBound + margin + Math.random() * (playableHeight - margin * 2); vx = baseSpeed; vy = 0; break;
+      case 'L': x = 800 + 16; y = topBound + margin + Math.random() * (playableHeight - margin * 2); vx = -baseSpeed; vy = 0; break;
     }
   } else {
     // left half: x in [0, halfX]
     switch (dir) {
-      case 'U': x = margin + Math.random() * (halfX - margin * 2); y = 600 + 16; vx = 0; vy = -baseSpeed; break;
-      case 'D': x = margin + Math.random() * (halfX - margin * 2); y = -16; vx = 0; vy = baseSpeed; break;
-      case 'R': x = -16; y = margin + Math.random() * (600 - margin * 2); vx = baseSpeed; vy = 0; break;
-      case 'L': x = halfX + 16; y = margin + Math.random() * (600 - margin * 2); vx = -baseSpeed; vy = 0; break;
+      case 'U': x = margin + Math.random() * (halfX - margin * 2); y = bottomBound + 16; vx = 0; vy = -baseSpeed; break;
+      case 'D': x = margin + Math.random() * (halfX - margin * 2); y = topBound - 16; vx = 0; vy = baseSpeed; break;
+      case 'R': x = -16; y = topBound + margin + Math.random() * (playableHeight - margin * 2); vx = baseSpeed; vy = 0; break;
+      case 'L': x = halfX + 16; y = topBound + margin + Math.random() * (playableHeight - margin * 2); vx = -baseSpeed; vy = 0; break;
     }
   }
   return { x, y, vx, vy, dir, side, color, ps: 8, type: 'arrow', dmg: 1 };
@@ -923,8 +1073,8 @@ function updateProjectiles(dt, now) {
         arr.splice(i, 1);
         continue;
       }
-      // cull when out of bounds
-      if (p.y < -24 || p.y > 624 || (side === 'L' && (p.x < -24 || p.x > halfX + 24)) || (side === 'R' && (p.x < halfX - 24 || p.x > 824))) {
+      // cull when out of bounds (respect top UI section)
+      if (p.y < TOP_UI_HEIGHT - 24 || p.y > 624 || (side === 'L' && (p.x < -24 || p.x > halfX + 24)) || (side === 'R' && (p.x < halfX - 24 || p.x > 824))) {
         arr.splice(i, 1);
       }
     }
@@ -947,9 +1097,189 @@ function onPlayerHit(player) {
 
 function onPlayerHit(player, now, dmg = 1) {
   if (player.immuneUntil && now < player.immuneUntil) return;
+  if (gameState !== 'playing') return;
+  
+  // Reduce both score and health
   player.score = Math.max(0, (player.score || 0) - dmg);
+  player.health = Math.max(0, (player.health || 0) - (dmg * 5)); // 5 health per damage point
+  
   drawScore(player);
+  drawHealthBar(player);
   player.immuneUntil = now + 1000; // 1s immunity
+  
+  // Check for game over
+  if (player.health <= 0) {
+    endGame(player === p1 ? p2 : p1, player);
+  }
+}
+
+function endGame(winner, loser) {
+  if (gameState === 'gameOver' || !sceneRef) return; // already ended or no scene
+  gameState = 'gameOver';
+  
+  // Semi-transparent overlay
+  const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+  overlay.setDepth(2000);
+  
+  // Winner message
+  const winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 250, 'GANÓ', {
+    fontSize: '64px',
+    fontFamily: 'Arial',
+    color: '#00ff00',
+    fontWeight: 'bold'
+  }).setOrigin(0.5).setDepth(2001);
+  
+  // Loser message
+  const loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 250, 'GAME OVER', {
+    fontSize: '64px',
+    fontFamily: 'Arial',
+    color: '#ff0000',
+    fontWeight: 'bold'
+  }).setOrigin(0.5).setDepth(2001);
+  
+  // Restart button
+  const restartText = sceneRef.add.text(400, 400, 'Presiona ESPACIO o ENTER para Reiniciar', {
+    fontSize: '28px',
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    fontWeight: 'bold'
+  }).setOrigin(0.5).setDepth(2001);
+  
+  gameOverText = { overlay, winnerText, loserText, restartText };
+}
+
+function showMenu() {
+  if (!sceneRef) return;
+  
+  // Background overlay
+  const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
+  
+  // Title
+  const title = sceneRef.add.text(400, 150, 'SPLIT ARENA DUO', {
+    fontSize: '64px',
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    fontWeight: 'bold'
+  }).setOrigin(0.5);
+  
+  // Start button
+  const startText = sceneRef.add.text(400, 350, 'Presiona ESPACIO o ENTER para Empezar', {
+    fontSize: '28px',
+    fontFamily: 'Arial',
+    color: '#00ff00',
+    fontWeight: 'bold'
+  }).setOrigin(0.5);
+  
+  // Instructions
+  const instr1 = sceneRef.add.text(400, 450, 'P1: WASD (movimiento) + ZXC (botones)', {
+    fontSize: '20px',
+    fontFamily: 'Arial',
+    color: '#8899ff'
+  }).setOrigin(0.5);
+  
+  const instr2 = sceneRef.add.text(400, 480, 'P2: FLECHAS (movimiento) + 123 (botones)', {
+    fontSize: '20px',
+    fontFamily: 'Arial',
+    color: '#ffdd00'
+  }).setOrigin(0.5);
+  
+  menuUI = { overlay, title, startText, instr1, instr2 };
+}
+
+function startGame() {
+  if (!sceneRef || gameState !== 'menu') return;
+  
+  // Hide menu
+  if (menuUI) {
+    menuUI.overlay.destroy();
+    menuUI.title.destroy();
+    menuUI.startText.destroy();
+    menuUI.instr1.destroy();
+    menuUI.instr2.destroy();
+    menuUI = null;
+  }
+  
+  // Show controls
+  sceneRef.children.list.forEach(child => {
+    if (child.name === 'controls') {
+      child.setVisible(true);
+    }
+  });
+  
+  // Reset game state
+  gameState = 'playing';
+  p1.health = p1.maxHealth;
+  p2.health = p2.maxHealth;
+  p1.score = 0;
+  p2.score = 0;
+  p1.progress = 0;
+  p2.progress = 0;
+  p1.pattern = makePattern();
+  p2.pattern = makePattern();
+  p1.immuneUntil = 0;
+  p2.immuneUntil = 0;
+  // Position players in center of playable area
+  p1.x = 200;
+  p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2; // Center of playable area
+  p2.x = 600;
+  p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2; // Center of playable area
+  projL = [];
+  projR = [];
+  shield = null;
+  nextShieldAt = 0;
+  
+  // Position UI and refresh - ensure anchors are set first, then draw everything
+  // positionUI sets anchors, then we explicitly draw since gameState is now 'playing'
+  positionUI(p1);
+  positionUI(p2);
+  // Now explicitly draw everything
+  drawHealthBar(p1);
+  drawHealthBar(p2);
+  drawPatternUI(p1);
+  drawPatternUI(p2);
+  refreshPatternTexts(p1);
+  refreshPatternTexts(p2);
+  drawScore(p1);
+  drawScore(p2);
+}
+
+function restartGame() {
+  if (!sceneRef || gameState !== 'gameOver') return;
+  
+  // Clean up game over UI
+  if (gameOverText) {
+    if (gameOverText.overlay) gameOverText.overlay.destroy();
+    if (gameOverText.winnerText) gameOverText.winnerText.destroy();
+    if (gameOverText.loserText) gameOverText.loserText.destroy();
+    if (gameOverText.restartText) gameOverText.restartText.destroy();
+    gameOverText = null;
+  }
+  
+  // Reset all game state for a fresh start
+  gameState = 'menu';
+  p1.health = p1.maxHealth;
+  p2.health = p2.maxHealth;
+  p1.score = 0;
+  p2.score = 0;
+  p1.progress = 0;
+  p2.progress = 0;
+  p1.pattern = makePattern();
+  p2.pattern = makePattern();
+  p1.immuneUntil = 0;
+  p2.immuneUntil = 0;
+  projL = [];
+  projR = [];
+  shield = null;
+  nextShieldAt = 0;
+  
+  // Position players in center of playable area
+  p1.x = 200;
+  p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+  p2.x = 600;
+  p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+  
+  // Show menu (UI will be refreshed when game starts)
+  showMenu();
 }
 
 function getPlayerColor(player, now) {
@@ -990,7 +1320,8 @@ function updateShield(now) {
       [0,0,0,0,0,0,0],
       [0,0,0,0,0,0,0],
       [0,0,0,0,0,0,0]
-    ];0, w = bananaY[0].length * ps;
+    ];
+    const w = bananaY[0].length * ps;
     const h = bananaY.length * ps;
     const sx = Math.floor(shield.x - w / 2);
     const sy = Math.floor(shield.y - h / 2);
@@ -1023,7 +1354,8 @@ function updateShield(now) {
 function spawnShield() {
   const margin = 20;
   const x = margin + Math.random() * (800 - margin * 2);
-  const y = margin + Math.random() * (600 - margin * 2);
+  // Spawn shield only in playable area (below top UI section)
+  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
   shield = { x, y, ps: 5 };
 }
 
