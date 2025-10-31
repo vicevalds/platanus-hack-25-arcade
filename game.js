@@ -4,7 +4,7 @@ const config = {
   type: Phaser.AUTO,
   width: 800,
   height: 600,
-  backgroundColor: '#000000',
+  backgroundColor: '#1a0f2e',
   scene: {
     create: create,
     update: update
@@ -33,6 +33,7 @@ let projR = []; // projectiles on right half (targeting P2)
 let shield = null; // {x,y,ps}
 let nextShieldAt = 0; // ms timestamp
 let timerGfx; // pixel timer display
+let stars = []; // background stars
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -235,6 +236,16 @@ const DIGITS = {
 function create() {
   g = this.add.graphics();
   timerGfx = this.add.graphics();
+  
+  // Create background stars
+  for (let i = 0; i < 100; i++) {
+    stars.push({
+      x: Math.random() * 800,
+      y: Math.random() * 600,
+      size: Math.random() < 0.7 ? 1 : 2, // most stars are small
+      brightness: 0.3 + Math.random() * 0.7
+    });
+  }
 
   cursors = this.input.keyboard.createCursorKeys();
   wasd = this.input.keyboard.addKeys({
@@ -276,6 +287,91 @@ function create() {
   });
 }
 
+function drawShadow(gr, x, y, size) {
+  // Shadow offset (sun is top-left, so shadow goes bottom-right)
+  const offsetX = 8;
+  const offsetY = 8;
+  const shadowWidth = size * 1.5;
+  const shadowHeight = size * 0.4;
+  
+  gr.fillStyle(0x000000, 0.3); // semi-transparent black
+  // Ellipse-like shadow using overlapping rectangles
+  const cx = x + offsetX;
+  const cy = y + offsetY + size;
+  gr.fillRect(cx - shadowWidth / 2, cy - shadowHeight / 2, shadowWidth, shadowHeight);
+}
+
+function drawArenaFloor(gr, halfX) {
+  // Left side - Mago's arena (solid dark purple)
+  gr.fillStyle(0x1a0f2e, 1);
+  gr.fillRect(0, 0, halfX, 600);
+  
+  // Space-themed details for mago side (subtle)
+  // Small cross-shaped stars (yellow)
+  gr.fillStyle(0xffee88, 0.5); // light yellow
+  const magoStars = [
+    [40, 120], [120, 80], [200, 180], [280, 250], [350, 150],
+    [80, 320], [180, 420], [300, 500], [250, 380], [150, 280],
+    [60, 480], [320, 90], [230, 540]
+  ];
+  for (const [x, y] of magoStars) {
+    // Draw cross shape (5 pixels)
+    const ps = 2;
+    gr.fillRect(x, y - ps, ps, ps); // top
+    gr.fillRect(x - ps, y, ps, ps); // left
+    gr.fillRect(x, y, ps, ps); // center
+    gr.fillRect(x + ps, y, ps, ps); // right
+    gr.fillRect(x, y + ps, ps, ps); // bottom
+  }
+  
+  // Asteroids (small pixel rocks) - light brown
+  gr.fillStyle(0x8b7355, 0.4); // light brown
+  const asteroids = [
+    [100, 200], [240, 350], [340, 480], [70, 440], [300, 140]
+  ];
+  for (const [ax, ay] of asteroids) {
+    // Draw small pixelated asteroid
+    gr.fillRect(ax, ay, 8, 8);
+    gr.fillRect(ax + 8, ay + 4, 4, 4);
+    gr.fillRect(ax - 4, ay + 4, 4, 4);
+  }
+  
+  // Right side - Skeleton's arena (solid brown earth color)
+  gr.fillStyle(0x3d2817, 1); // darker earth brown
+  gr.fillRect(halfX, 0, halfX, 600);
+  
+  // Earth-themed details for skeleton side (subtle)
+  // Small grass patches
+  gr.fillStyle(0x2d5016, 0.6); // dark green
+  const grassPatches = [
+    [450, 140], [550, 240], [650, 180], [720, 320], [480, 380],
+    [620, 450], [740, 520], [520, 520], [680, 100], [580, 340]
+  ];
+  for (const [gx, gy] of grassPatches) {
+    // Small grass patch (pixelated)
+    gr.fillRect(gx, gy + 8, 12, 3);
+    gr.fillRect(gx + 2, gy + 5, 8, 3);
+    gr.fillRect(gx + 4, gy + 2, 4, 3);
+  }
+  
+  // Small bones scattered
+  gr.fillStyle(0x8a7a6a, 0.5); // bone color
+  const bonePositions = [
+    [470, 200], [590, 300], [710, 420], [530, 480], [660, 260],
+    [750, 150], [440, 540], [610, 90]
+  ];
+  for (const [bx, by] of bonePositions) {
+    // Tiny bone shape (horizontal)
+    gr.fillRect(bx, by + 2, 10, 2);
+    gr.fillRect(bx - 1, by, 3, 6);
+    gr.fillRect(bx + 8, by, 3, 6);
+  }
+  
+  // Middle divider - solid cyan/light blue
+  gr.fillStyle(0x66ccff, 1); // light cyan/blue
+  gr.fillRect(halfX - 2, 0, 4, 600);
+}
+
 function update(_time, delta) {
   const dt = delta / 1000;
   const half = 400;
@@ -310,12 +406,18 @@ function update(_time, delta) {
 
   // Draw
   g.clear();
-  // middle divider
-  g.lineStyle(2, 0x222222, 1);
-  g.beginPath();
-  g.moveTo(half + 0.5, 0);
-  g.lineTo(half + 0.5, 600);
-  g.strokePath();
+  
+  // Draw background stars
+  for (const star of stars) {
+    g.fillStyle(0xffffff, star.brightness);
+    g.fillRect(star.x, star.y, star.size, star.size);
+  }
+  
+  // Arena floor design
+  drawArenaFloor(g, half);
+  
+  // Draw shadow only for player 2 (skeleton)
+  drawShadow(g, p2.x, p2.y, p2.size);
 
   // move and draw projectiles
   updateProjectiles(dt, _time);
@@ -869,6 +971,9 @@ function updateShield(now) {
   }
   // draw and check pickup
   if (shield) {
+    // Draw shadow for banana first
+    drawShadow(g, shield.x, shield.y, 15);
+    
     const ps = shield.ps;
     // Banana pixel art (two colors: peel yellow and stem brown)
     const bananaY = [
