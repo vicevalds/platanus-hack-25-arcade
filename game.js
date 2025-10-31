@@ -21,7 +21,13 @@ let wasd;
 let speed = 220; // px/s
 const DIRS = ['U','R','D','L'];
 const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
+// Button to direction mapping (for attacks)
 // A = Left, B = Up or Down (random), C = Right
+const BUTTON_TO_DIR = {
+  'A': 'L',  // Left button = Left
+  'C': 'R'   // Right button = Right
+  // B is handled specially to randomly pick Up or Down
+};
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
 let shield = null; // {x,y,ps}
@@ -270,7 +276,15 @@ function update(_time, delta) {
   const p1BodyColor = p1Blinking ? 0x666666 : 0x0066ff; // azul, o gris si inmune y parpadeando
   const p1LegsColor = p1Blinking ? 0x666666 : 0x8b5a2b; // café, o gris si inmune y parpadeando
   drawPixelPerson(g, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
-  drawPixelPerson(g, p2.x, p2.y, p2.size, getPlayerColor(p2, _time), PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS);
+  
+  // P2: colores personalizados con cuerpo amarillo
+  const p2Color = getPlayerColor(p2, _time);
+  const p2IsImmune = (p2.immuneUntil && _time < p2.immuneUntil);
+  const p2Blinking = p2IsImmune && (Math.floor(_time / 120) % 2 === 1);
+  const p2HeadColor = p2Blinking ? 0x666666 : 0xf0f0f0; // blanco/gris claro
+  const p2BodyColor = p2Blinking ? 0x666666 : 0x8b5a2b; // amarillo
+  const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
+  drawPixelPerson(g, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
 
   // Position pattern UI above players
   positionUI(p1);
@@ -362,21 +376,6 @@ const PERSON_MASK_P2_HEAD = [
   [0,1,1,1,1,1,0,0],
   [1,0,1,1,0,1,1,0],
   [0,1,1,1,1,1,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0]
-];
-const PERSON_MASK_P2_BODY = [
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
   [0,0,0,1,0,0,0,0],
   [1,1,1,1,1,1,1,0],
   [1,0,0,1,0,0,1,0],
@@ -388,9 +387,24 @@ const PERSON_MASK_P2_BODY = [
   [0,0,0,0,0,0,0,0],
   [0,0,0,0,0,0,0,0]
 ];
+const PERSON_MASK_P2_BODY = [
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0]
+];
 const PERSON_MASK_P2_LEGS = [
-  [0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0],
+  [0,1,1,1,1,1,0,0],
+  [1,0,1,1,0,1,1,0],
   [0,0,0,0,0,0,0,0],
   [0,0,0,0,0,0,0,0],
   [0,0,0,0,0,0,0,0],
@@ -514,6 +528,11 @@ function initPlayerUI(scene, player, side) {
   player.progress = 0;
   player.pattern = makePattern();
   player.side = side;
+  player.patternText = scene.add.text(0, 0, '', {
+    fontSize: '18px',
+    fontFamily: 'Arial, sans-serif',
+    color: '#ffffff'
+  }).setOrigin(0.5, 1);
   player.patternGfx = scene.add.graphics();
   player.scoreGfx = scene.add.graphics();
   player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
@@ -568,7 +587,8 @@ function tryStep(player, input) {
 
 function positionUI(player) {
   const centerX = player.side === 'L' ? 200 : 600;
-  const patY = 50;
+  const patY = 56;
+  player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
   player.patternAnchor = { x: centerX, y: patY };
   drawPatternUI(player);
   drawScore(player);
@@ -582,10 +602,11 @@ function drawPatternUI(player) {
   const gfx = player.patternGfx;
   gfx.clear();
   const masks = {
+    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R,
     A: BUTTON_A, B: BUTTON_B, C: BUTTON_C
   };
-  const iconW = BUTTON_A[0].length; // all icons are 5x5
-  const iconH = BUTTON_A.length;
+  const iconW = ARROW_U[0].length; // all icons are 5x5
+  const iconH = ARROW_U.length;
   const aw = iconW * basePs;
   const aw2 = iconW * basePs * 2; // current button width when scaled 2x
   // compute total width with one button possibly 2x
