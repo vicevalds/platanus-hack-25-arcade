@@ -244,7 +244,18 @@ function create() {
     right: Phaser.Input.Keyboard.KeyCodes.D
   });
 
-  // Removed on-screen control instructions for cleaner HUD
+  // Control instructions
+  this.add.text(100, 580, 'P1: WASD + ZXC', {
+    fontSize: '14px',
+    fontFamily: 'Arial',
+    color: '#8899ff'
+  }).setOrigin(0.5);
+  
+  this.add.text(700, 580, 'P2: Arrows + 123', {
+    fontSize: '14px',
+    fontFamily: 'Arial',
+    color: '#ffdd00'
+  }).setOrigin(0.5);
 
   // Pattern & score UI
   initPlayerUI(this, p1, 'L');
