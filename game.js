@@ -533,8 +533,8 @@ function update(_time, delta) {
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
     // Players lose health 20% faster when standing still
-    const p1DrainMultiplier = p1IsMoving ? 1.0 : 1.2;
-    const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.2;
+    const p1DrainMultiplier = p1IsMoving ? 1.0 : 1.6;
+    const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.6;
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
     if (gameMode === 'twoPlayer') {
@@ -879,16 +879,68 @@ function drawTimer(now) {
   // Only show timer when playing
   if (gameState !== 'playing') return;
   
-  // Draw round number above timer
-  const roundText = 'R' + String(currentRound);
-  drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
-  
-  // Draw countdown timer (10 to 0) below round
-  const elapsed = (now - gameStartTime) / 1000;
-  const timeInRound = elapsed % 10; // time within current round
-  const countdown = Math.max(0, Math.floor(10 - timeInRound)); // countdown from 10 to 0
-  const text = String(countdown).padStart(2, '0');
-  drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
+  // In single player mode, draw in top right corner
+  if (gameMode === 'singlePlayer') {
+    // Draw round number
+    const roundText = 'R' + String(currentRound);
+    const roundX = 720; // Right aligned position
+    const roundY = 15;
+    
+    // Calculate width to align right
+    let totalW = 0;
+    for (let i = 0; i < roundText.length; i++) {
+      const d = DIGITS[roundText[i]];
+      totalW += d[0].length * 4 + 2; // ps=4, gap=2
+    }
+    
+    timerGfx.fillStyle(0xffaa00, 1);
+    let x = roundX - totalW;
+    for (let i = 0; i < roundText.length; i++) {
+      const d = DIGITS[roundText[i]];
+      for (let r = 0; r < d.length; r++) {
+        for (let c = 0; c < d[r].length; c++) {
+          if (d[r][c]) timerGfx.fillRect(x + c * 4, roundY + r * 4, 4, 4);
+        }
+      }
+      x += d[0].length * 4 + 2;
+    }
+    
+    // Draw countdown timer below round
+    const elapsed = (now - gameStartTime) / 1000;
+    const timeInRound = elapsed % 10;
+    const countdown = Math.max(0, Math.floor(10 - timeInRound));
+    const timeText = String(countdown).padStart(2, '0');
+    
+    // Calculate width for time
+    totalW = 0;
+    for (let i = 0; i < timeText.length; i++) {
+      const d = DIGITS[timeText[i]];
+      totalW += d[0].length * 5 + 2; // ps=5, gap=2
+    }
+    
+    timerGfx.fillStyle(0xffffff, 1);
+    x = roundX - totalW;
+    const timeY = 45;
+    for (let i = 0; i < timeText.length; i++) {
+      const d = DIGITS[timeText[i]];
+      for (let r = 0; r < d.length; r++) {
+        for (let c = 0; c < d[r].length; c++) {
+          if (d[r][c]) timerGfx.fillRect(x + c * 5, timeY + r * 5, 5, 5);
+        }
+      }
+      x += d[0].length * 5 + 2;
+    }
+  } else {
+    // Two player mode: draw centered
+    const roundText = 'R' + String(currentRound);
+    drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
+    
+    const elapsed = (now - gameStartTime) / 1000;
+    const timeInRound = elapsed % 10;
+    const countdown = Math.max(0, Math.floor(10 - timeInRound));
+    const text = String(countdown).padStart(2, '0');
+    drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
+  }
 }
 
 function initPlayerUI(scene, player, side) {
@@ -992,8 +1044,8 @@ function tryStep(player, input) {
     
     if (player.progress >= player.pattern.length) {
       player.score++;
-      // Recover health to 100% when completing pattern
-      player.health = player.maxHealth;
+      // Recover 50% of max health when completing pattern (capped at max health)
+      player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.5);
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
       // In single player mode, spawn projectiles targeting the same player
@@ -1159,9 +1211,9 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
         
         // In single player mode, always use skeleton design (bones)
         if (gameMode === 'singlePlayer' && isP1) {
-          // 15% probability for double damage attack (stone ball)
+          // 15% probability for extra damage attack (stone ball - 1.5x damage)
           if (Math.random() < 0.15) {
-            p.dmg = 2;
+            p.dmg = 1.5;
             p.ps = 10;
             p.type = 'stone';
             p.color = 0x666666; // gray stone
@@ -1173,9 +1225,9 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
           }
         } else {
           // Two player mode: use normal projectile designs
-          // 15% probability for double damage attack
+          // 15% probability for extra damage attack (1.5x damage)
           if (Math.random() < 0.15) {
-            p.dmg = 2;
+            p.dmg = 1.5;
             p.ps = 10;
             if (isP1) {
               // P1 (mago): star
@@ -1342,7 +1394,8 @@ function onPlayerHit(player, now, dmg = 1) {
   const finalDamage = dmg * baseDamage * roundMultiplier;
   
   // Reduce both score and health
-  player.score = Math.max(0, (player.score || 0) - dmg);
+  // Round dmg to nearest integer for score to avoid decimal scores
+  player.score = Math.max(0, (player.score || 0) - Math.round(dmg));
   player.health = Math.max(0, (player.health || 0) - finalDamage);
   
   drawScore(player);
