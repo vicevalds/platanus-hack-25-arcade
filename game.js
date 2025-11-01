@@ -32,8 +32,10 @@ const BUTTON_TO_DIR = {
 };
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
-let shield = null; // {x,y,ps}
-let nextShieldAt = 0; // ms timestamp
+let shieldP1 = null; // banana for P1
+let shieldP2 = null; // banana for P2
+let nextShieldP1At = 0; // ms timestamp for P1 banana
+let nextShieldP2At = 0; // ms timestamp for P2 banana
 let timerGfx; // pixel timer display
 let stars = []; // background stars
 let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
@@ -433,28 +435,6 @@ function update(_time, delta) {
   // Don't update game if in menu
   if (gameState === 'menu') return;
 
-  // Health drain over time (if playing)
-  if (gameState === 'playing') {
-    // Calculate current round based on elapsed time (30 seconds per round)
-    const elapsedSeconds = (_time - gameStartTime) / 1000;
-    currentRound = Math.floor(elapsedSeconds / 30) + 1;
-    
-    // Base health drain rate increases with each round
-    const baseHealthDrainRate = 30; // health per second (doubled for faster depletion)
-    const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
-    const healthDrainRate = baseHealthDrainRate * roundMultiplier;
-    
-    p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * dt);
-    p2.health = Math.max(0, (p2.health || 0) - healthDrainRate * dt);
-    
-    // Check for game over from health drain
-    if (p1.health <= 0) {
-      endGame(p2, p1);
-    } else if (p2.health <= 0) {
-      endGame(p1, p2);
-    }
-  }
-
   // Input P1 (WASD)
   let vx1 = 0, vy1 = 0;
   if (gameState === 'playing' && wasd.left.isDown) vx1 -= 1;
@@ -462,6 +442,7 @@ function update(_time, delta) {
   if (gameState === 'playing' && wasd.up.isDown) vy1 -= 1;
   if (gameState === 'playing' && wasd.down.isDown) vy1 += 1;
   if (vx1 !== 0 && vy1 !== 0) { const s = Math.SQRT1_2; vx1 *= s; vy1 *= s; }
+  const p1IsMoving = vx1 !== 0 || vy1 !== 0;
   p1.x += vx1 * speed * dt;
   p1.y += vy1 * speed * dt;
 
@@ -472,8 +453,35 @@ function update(_time, delta) {
   if (gameState === 'playing' && cursors.up.isDown) vy2 -= 1;
   if (gameState === 'playing' && cursors.down.isDown) vy2 += 1;
   if (vx2 !== 0 && vy2 !== 0) { const s = Math.SQRT1_2; vx2 *= s; vy2 *= s; }
+  const p2IsMoving = vx2 !== 0 || vy2 !== 0;
   p2.x += vx2 * speed * dt;
   p2.y += vy2 * speed * dt;
+
+  // Health drain over time (if playing)
+  if (gameState === 'playing') {
+    // Calculate current round based on elapsed time (10 seconds per round)
+    const elapsedSeconds = (_time - gameStartTime) / 1000;
+    currentRound = Math.floor(elapsedSeconds / 10) + 1;
+    
+    // Base health drain rate increases with each round
+    const baseHealthDrainRate = 30; // health per second
+    const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
+    const healthDrainRate = baseHealthDrainRate * roundMultiplier;
+    
+    // Players lose health 20% faster when standing still
+    const p1DrainMultiplier = p1IsMoving ? 1.0 : 1.3;
+    const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.3;
+    
+    p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
+    p2.health = Math.max(0, (p2.health || 0) - healthDrainRate * p2DrainMultiplier * dt);
+    
+    // Check for game over from health drain
+    if (p1.health <= 0) {
+      endGame(p2, p1);
+    } else if (p2.health <= 0) {
+      endGame(p1, p2);
+    }
+  }
 
   // Constrain to halves and screen (with top UI section limit)
   const m1 = p1.size;
@@ -503,8 +511,9 @@ function update(_time, delta) {
   // move and draw projectiles (on arena layer)
   updateProjectiles(dt, _time);
 
-  // shield power-up (on arena layer)
-  updateShield(_time);
+  // shield power-ups (on arena layer) - one per player
+  updateShieldP1(_time);
+  updateShieldP2(_time);
 
   // timer
   drawTimer(_time);
@@ -775,17 +784,18 @@ function drawTimer(now) {
   if (!timerGfx) return;
   timerGfx.clear();
   
-  // Draw round number above timer
-  if (gameState === 'playing') {
-    const roundText = 'R' + String(currentRound);
-    drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
-  }
+  // Only show timer when playing
+  if (gameState !== 'playing') return;
   
-  // Draw timer below round
-  const elapsed = Math.floor((now - gameStartTime) / 1000);
-  const mm = Math.floor(elapsed / 60);
-  const ss = elapsed % 60;
-  const text = String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  // Draw round number above timer
+  const roundText = 'R' + String(currentRound);
+  drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
+  
+  // Draw countdown timer (10 to 0) below round
+  const elapsed = (now - gameStartTime) / 1000;
+  const timeInRound = elapsed % 10; // time within current round
+  const countdown = Math.max(0, Math.floor(10 - timeInRound)); // countdown from 10 to 0
+  const text = String(countdown).padStart(2, '0');
   drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
 }
 
@@ -878,7 +888,7 @@ function tryStep(player, input) {
     if (player.progress >= player.pattern.length) {
       player.score++;
       // Recover health when completing pattern (proportional to pattern length)
-      const healthRecovery = player.pattern.length * 5; // 5 health per pattern step
+      const healthRecovery = player.pattern.length * 12; // 5 health per pattern step
       player.health = Math.min(player.maxHealth, (player.health || 0) + healthRecovery);
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
@@ -1296,8 +1306,10 @@ function startGame() {
   p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2; // Center of playable area
   projL = [];
   projR = [];
-  shield = null;
-  nextShieldAt = 0;
+  shieldP1 = null;
+  shieldP2 = null;
+  nextShieldP1At = 0;
+  nextShieldP2At = 0;
   
   // Position UI and refresh - ensure anchors are set first, then draw everything
   // positionUI sets anchors, then we explicitly draw since gameState is now 'playing'
@@ -1344,8 +1356,10 @@ function restartGame() {
   p2.immuneUntil = 0;
   projL = [];
   projR = [];
-  shield = null;
-  nextShieldAt = 0;
+  shieldP1 = null;
+  shieldP2 = null;
+  nextShieldP1At = 0;
+  nextShieldP2At = 0;
   
   // Position players in center of playable area
   p1.x = 200;
@@ -1374,22 +1388,22 @@ function getPlayerColor(player, now) {
   return player.color;
 }
 
-function updateShield(now) {
+function updateShieldP1(now) {
   // schedule spawn if none
-  if (!shield) {
-    if (nextShieldAt === 0) {
+  if (!shieldP1) {
+    if (nextShieldP1At === 0) {
       // set an initial delay so it doesn't appear immediately
-      nextShieldAt = now + (10000 + Math.random() * 15000); // 10..25s initial spawn
-    } else if (now >= nextShieldAt) {
-      spawnShield();
+      nextShieldP1At = now + (5000 + Math.random() * 3000); // 5-8s initial spawn
+    } else if (now >= nextShieldP1At) {
+      spawnShieldP1();
     }
   }
   // draw and check pickup
-  if (shield) {
+  if (shieldP1) {
     // Draw shadow for banana first
-    drawShadow(g, shield.x, shield.y, 15);
+    drawShadow(g, shieldP1.x, shieldP1.y, 15);
     
-    const ps = shield.ps;
+    const ps = shieldP1.ps;
     // Banana pixel art (two colors: peel yellow and stem brown)
     const bananaY = [
       [0,0,0,0,1,0,0],
@@ -1408,8 +1422,8 @@ function updateShield(now) {
     ];
     const w = bananaY[0].length * ps;
     const h = bananaY.length * ps;
-    const sx = Math.floor(shield.x - w / 2);
-    const sy = Math.floor(shield.y - h / 2);
+    const sx = Math.floor(shieldP1.x - w / 2);
+    const sy = Math.floor(shieldP1.y - h / 2);
     // draw yellow peel
     g.fillStyle(0xffe066, 1);
     for (let r = 0; r < bananaY.length; r++) {
@@ -1425,28 +1439,93 @@ function updateShield(now) {
       }
     }
 
-    // pickup check
-    if (distSq(p1.x, p1.y, shield.x, shield.y) <= (p1.size + 10) * (p1.size + 10)) {
+    // pickup check for P1 only
+    if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       grantImmunity(p1, 3000, now); // 3 seconds immunity
-      shield = null; scheduleNextShield(now);
-    } else if (distSq(p2.x, p2.y, shield.x, shield.y) <= (p2.size + 10) * (p2.size + 10)) {
-      grantImmunity(p2, 3000, now); // 3 seconds immunity
-      shield = null; scheduleNextShield(now);
+      shieldP1 = null; 
+      nextShieldP1At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
     }
   }
 }
 
-function spawnShield() {
-  const margin = 20;
-  const x = margin + Math.random() * (800 - margin * 2);
-  // Spawn shield only in playable area (below top UI section)
-  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  shield = { x, y, ps: 5 };
+function updateShieldP2(now) {
+  // schedule spawn if none
+  if (!shieldP2) {
+    if (nextShieldP2At === 0) {
+      // set an initial delay so it doesn't appear immediately
+      nextShieldP2At = now + (5000 + Math.random() * 3000); // 5-8s initial spawn
+    } else if (now >= nextShieldP2At) {
+      spawnShieldP2();
+    }
+  }
+  // draw and check pickup
+  if (shieldP2) {
+    // Draw shadow for banana first
+    drawShadow(g, shieldP2.x, shieldP2.y, 15);
+    
+    const ps = shieldP2.ps;
+    // Banana pixel art (two colors: peel yellow and stem brown)
+    const bananaY = [
+      [0,0,0,0,1,0,0],
+      [0,0,0,0,1,1,0],
+      [0,0,0,0,1,1,0],
+      [0,0,0,1,1,1,0],
+      [1,1,1,1,1,1,0],
+      [0,1,1,1,1,0,0]
+    ];
+    const bananaB = [
+      [0,0,0,0,1,0,0],
+      [0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,0]
+    ];
+    const w = bananaY[0].length * ps;
+    const h = bananaY.length * ps;
+    const sx = Math.floor(shieldP2.x - w / 2);
+    const sy = Math.floor(shieldP2.y - h / 2);
+    // draw yellow peel
+    g.fillStyle(0xffe066, 1);
+    for (let r = 0; r < bananaY.length; r++) {
+      for (let c = 0; c < bananaY[r].length; c++) {
+        if (bananaY[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+    // draw brown stem
+    g.fillStyle(0x8b5a2b, 1);
+    for (let r = 0; r < bananaB.length; r++) {
+      for (let c = 0; c < bananaB[r].length; c++) {
+        if (bananaB[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+
+    // pickup check for P2 only
+    if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
+      grantImmunity(p2, 3000, now); // 3 seconds immunity
+      shieldP2 = null;
+      nextShieldP2At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+    }
+  }
 }
 
-function scheduleNextShield(now) {
-  // respawn in 10..25 seconds after pickup (minimum 10 seconds to allow immunity to expire)
-  nextShieldAt = now + (10000 + Math.random() * 15000);
+function spawnShieldP1() {
+  const margin = 20;
+  const halfX = 400;
+  // Spawn in P1's half (left side)
+  const x = margin + Math.random() * (halfX - margin * 2);
+  // Spawn shield only in playable area (below top UI section)
+  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
+  shieldP1 = { x, y, ps: 5 };
+}
+
+function spawnShieldP2() {
+  const margin = 20;
+  const halfX = 400;
+  // Spawn in P2's half (right side)
+  const x = halfX + margin + Math.random() * (halfX - margin * 2);
+  // Spawn shield only in playable area (below top UI section)
+  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
+  shieldP2 = { x, y, ps: 5 };
 }
 
 function grantImmunity(player, ms, now) {
