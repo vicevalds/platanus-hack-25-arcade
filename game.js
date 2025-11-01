@@ -1364,7 +1364,7 @@ function endGame(winner, loser) {
   gameState = 'gameOver';
   
   // Semi-transparent overlay
-  const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+  const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
   overlay.setDepth(2000);
   
   let winnerText = null;
@@ -1373,16 +1373,16 @@ function endGame(winner, loser) {
   
   if (gameMode === 'singlePlayer') {
     // Single player: Game Over message
-    gameOverTitle = sceneRef.add.text(400, 200, 'Game Over', {
-      fontSize: '64px',
+    gameOverTitle = sceneRef.add.text(400, 180, 'GAME OVER', {
+      fontSize: '72px',
       fontFamily: 'Arial',
-      color: '#ff0000',
+      color: '#ff4444',
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
     // Show score
-    const finalScore = sceneRef.add.text(400, 280, 'Puntaje Final: ' + (p1.score || 0), {
-      fontSize: '36px',
+    const finalScore = sceneRef.add.text(400, 260, 'Final Score: ' + (p1.score || 0), {
+      fontSize: '40px',
       fontFamily: 'Arial',
       color: '#ffffff',
       fontWeight: 'bold'
@@ -1391,17 +1391,17 @@ function endGame(winner, loser) {
     gameOverText = { overlay, gameOverTitle, finalScore };
   } else {
     // Two player mode: Winner/Loser messages
-    winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 250, 'Winner', {
-      fontSize: '64px',
+    winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 220, 'WINNER', {
+      fontSize: '56px',
       fontFamily: 'Arial',
       color: '#00ff00',
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
-    loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 250, 'Loser', {
-      fontSize: '64px',
+    loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 220, 'LOSER', {
+      fontSize: '56px',
       fontFamily: 'Arial',
-      color: '#ff0000',
+      color: '#ff4444',
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
@@ -1409,19 +1409,18 @@ function endGame(winner, loser) {
   }
   
   // Restart button (default option)
-  const restartText = sceneRef.add.text(400, 380, 'Presiona ESPACIO o ENTER para Reiniciar', {
-    fontSize: '24px',
+  const restartText = sceneRef.add.text(400, 360, 'Press SPACE or ENTER to restart', {
+    fontSize: '28px',
     fontFamily: 'Arial',
     color: '#00ff00',
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(2001);
   
   // Menu button
-  const menuText = sceneRef.add.text(400, 430, 'Presiona ESC o M para volver al Menú', {
-    fontSize: '24px',
+  const menuText = sceneRef.add.text(400, 420, 'Back to Menu (ESC or M)', {
+    fontSize: '22px',
     fontFamily: 'Arial',
-    color: '#aaaaaa',
-    fontWeight: 'bold'
+    color: '#aaaaaa'
   }).setOrigin(0.5).setDepth(2001);
   
   gameOverText.restartText = restartText;
@@ -1431,83 +1430,113 @@ function endGame(winner, loser) {
 function showMenu() {
   if (!sceneRef) return;
   
-  // Background overlay
-  const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
+  // Create menu background graphics with mage arena theme
+  const menuBg = sceneRef.add.graphics();
+  menuBg.setDepth(1500);
+  
+  // Dark purple background (mago theme)
+  menuBg.fillStyle(0x1a0f2e, 1);
+  menuBg.fillRect(0, 0, 800, 600);
+  
+  // Add space-themed stars
+  menuBg.fillStyle(0xffee88, 0.5);
+  const menuStars = [
+    [40, 120], [120, 80], [200, 180], [280, 250], [350, 150],
+    [80, 320], [180, 420], [300, 500], [250, 380], [150, 280],
+    [60, 480], [320, 90], [230, 540],
+    [440, 120], [520, 80], [600, 180], [680, 250], [750, 150],
+    [480, 320], [580, 420], [700, 500], [650, 380], [550, 280],
+    [460, 480], [720, 90], [630, 540]
+  ];
+  for (const [x, y] of menuStars) {
+    const ps = 2;
+    menuBg.fillRect(x, y - ps, ps, ps);
+    menuBg.fillRect(x - ps, y, ps, ps);
+    menuBg.fillRect(x, y, ps, ps);
+    menuBg.fillRect(x + ps, y, ps, ps);
+    menuBg.fillRect(x, y + ps, ps, ps);
+  }
+  
+  // Add asteroids
+  menuBg.fillStyle(0x8b7355, 0.4);
+  const menuAsteroids = [
+    [100, 200], [240, 350], [340, 480], [70, 440], [300, 140],
+    [500, 200], [640, 350], [740, 480], [470, 440], [700, 140]
+  ];
+  for (const [ax, ay] of menuAsteroids) {
+    menuBg.fillRect(ax, ay, 8, 8);
+    menuBg.fillRect(ax + 8, ay + 4, 4, 4);
+    menuBg.fillRect(ax - 4, ay + 4, 4, 4);
+  }
   
   // Title
-  const title = sceneRef.add.text(400, 120, 'SPLIT ARENA DUO', {
-    fontSize: '64px',
+  const title = sceneRef.add.text(400, 140, 'Epic Battle', {
+    fontSize: '72px',
     fontFamily: 'Arial',
     color: '#ffffff',
     fontWeight: 'bold'
-  }).setOrigin(0.5);
+  }).setOrigin(0.5).setDepth(1501);
   
-  // Mode selection title
-  const modeTitle = sceneRef.add.text(400, 220, 'Selecciona Modo de Juego:', {
-    fontSize: '32px',
-    fontFamily: 'Arial',
-    color: '#ffffff',
-    fontWeight: 'bold'
-  }).setOrigin(0.5);
-  
-  // Single player option
-  const singlePlayerText = sceneRef.add.text(400, 290, 'Un Jugador (Mago)', {
-    fontSize: '28px',
-    fontFamily: 'Arial',
-    color: '#ffffff',
-    fontWeight: 'bold'
-  }).setOrigin(0.5);
-  
-  // Two player option
-  const twoPlayerText = sceneRef.add.text(400, 340, 'Dos Jugadores', {
-    fontSize: '28px',
-    fontFamily: 'Arial',
-    color: '#ffffff',
-    fontWeight: 'bold'
-  }).setOrigin(0.5);
-  
-  // Navigation instructions
-  const navInstr = sceneRef.add.text(400, 410, 'Usa W/S o Flechas para navegar', {
-    fontSize: '20px',
+  // Description
+  const description = sceneRef.add.text(400, 200, 'Help the wizard defeat the skeletons in an epic battle', {
+    fontSize: '18px',
     fontFamily: 'Arial',
     color: '#aaaaaa'
-  }).setOrigin(0.5);
+  }).setOrigin(0.5).setDepth(1501);
   
-  // Start button
-  const startText = sceneRef.add.text(400, 460, 'Presiona ESPACIO o ENTER para Empezar', {
-    fontSize: '24px',
+  // Single player option
+  const singlePlayerText = sceneRef.add.text(400, 310, 'One Player', {
+    fontSize: '36px',
     fontFamily: 'Arial',
-    color: '#00ff00',
+    color: '#ffffff',
     fontWeight: 'bold'
-  }).setOrigin(0.5);
+  }).setOrigin(0.5).setDepth(1501);
   
-  // Instructions
-  const instr1 = sceneRef.add.text(400, 520, 'P1: WASD (movimiento) + ZXC (botones)', {
-    fontSize: '18px',
+  // Two player option
+  const twoPlayerText = sceneRef.add.text(400, 370, 'Two Players', {
+    fontSize: '36px',
     fontFamily: 'Arial',
-    color: '#8899ff'
-  }).setOrigin(0.5);
+    color: '#ffffff',
+    fontWeight: 'bold'
+  }).setOrigin(0.5).setDepth(1501);
   
-  const instr2 = sceneRef.add.text(400, 550, 'P2: FLECHAS (movimiento) + 123 (botones)', {
-    fontSize: '18px',
+  // Controls info - In PC
+  const controlsTitle = sceneRef.add.text(400, 500, 'In PC:', {
+    fontSize: '14px',
     fontFamily: 'Arial',
-    color: '#ffdd00'
-  }).setOrigin(0.5);
+    color: '#888888'
+  }).setOrigin(0.5).setDepth(1501);
   
-  menuUI = { overlay, title, modeTitle, singlePlayerText, twoPlayerText, navInstr, startText, instr1, instr2 };
+  const controls1 = sceneRef.add.text(400, 525, 'W/S or Arrows to select - SPACE/ENTER to start', {
+    fontSize: '14px',
+    fontFamily: 'Arial',
+    color: '#666666'
+  }).setOrigin(0.5).setDepth(1501);
+  
+  const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + ZXC | P2: Arrows + 123', {
+    fontSize: '14px',
+    fontFamily: 'Arial',
+    color: '#666666'
+  }).setOrigin(0.5).setDepth(1501);
+  
+  menuUI = { menuBg, title, description, singlePlayerText, twoPlayerText, controlsTitle, controls1, controls2 };
   updateMenuSelection();
 }
 
 function updateMenuSelection() {
   if (!menuUI) return;
   
-  // Update colors based on selection
+  // Update colors and scale based on selection
   if (menuSelection === 0) {
     menuUI.singlePlayerText.setColor('#00ff00');
+    menuUI.singlePlayerText.setFontSize('40px');
     menuUI.twoPlayerText.setColor('#ffffff');
+    menuUI.twoPlayerText.setFontSize('36px');
   } else {
     menuUI.singlePlayerText.setColor('#ffffff');
+    menuUI.singlePlayerText.setFontSize('36px');
     menuUI.twoPlayerText.setColor('#00ff00');
+    menuUI.twoPlayerText.setFontSize('40px');
   }
 }
 
@@ -1516,15 +1545,14 @@ function startGame() {
   
   // Hide menu
   if (menuUI) {
-    menuUI.overlay.destroy();
-    menuUI.title.destroy();
-    if (menuUI.modeTitle) menuUI.modeTitle.destroy();
+    if (menuUI.menuBg) menuUI.menuBg.destroy();
+    if (menuUI.title) menuUI.title.destroy();
+    if (menuUI.description) menuUI.description.destroy();
     if (menuUI.singlePlayerText) menuUI.singlePlayerText.destroy();
     if (menuUI.twoPlayerText) menuUI.twoPlayerText.destroy();
-    if (menuUI.navInstr) menuUI.navInstr.destroy();
-    menuUI.startText.destroy();
-    menuUI.instr1.destroy();
-    menuUI.instr2.destroy();
+    if (menuUI.controlsTitle) menuUI.controlsTitle.destroy();
+    if (menuUI.controls1) menuUI.controls1.destroy();
+    if (menuUI.controls2) menuUI.controls2.destroy();
     menuUI = null;
   }
   
