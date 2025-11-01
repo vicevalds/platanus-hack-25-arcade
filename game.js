@@ -36,6 +36,10 @@ let shieldP1 = null; // banana for P1
 let shieldP2 = null; // banana for P2
 let nextShieldP1At = 0; // ms timestamp for P1 banana
 let nextShieldP2At = 0; // ms timestamp for P2 banana
+let bukP1 = null; // buk shield for P1
+let bukP2 = null; // buk shield for P2
+let nextBukP1At = 0; // ms timestamp for P1 buk
+let nextBukP2At = 0; // ms timestamp for P2 buk
 let timerGfx; // pixel timer display
 let stars = []; // background stars
 let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
@@ -48,7 +52,7 @@ let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
 
 // Test mode: set to true to complete patterns with just the first symbol
-const testMode = false;
+const testMode = true;
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -165,6 +169,14 @@ const STAR_B = [
   [1,1,1,1,1],
   [0,0,1,0,0],
   [0,1,0,1,0]
+];
+
+const BUK_LOGO = [
+  [0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0],
+  [0,0,0,1,0,0,0,1,0,1,0,1,0,1,0,0,0],
+  [1,1,0,1,1,0,0,1,0,1,0,1,1,0,0,1,1],
+  [1,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1],
+  [0,0,0,1,1,0,0,1,1,1,0,1,0,1,0,0,0]
 ];
 
 // Pixel digit masks (3x5)
@@ -528,7 +540,7 @@ function update(_time, delta) {
     currentRound = Math.floor(elapsedSeconds / 10) + 1;
     
     // Base health drain rate increases with each round
-    const baseHealthDrainRate = 20; // health per second
+    const baseHealthDrainRate = 15; // health per second
     const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
@@ -599,6 +611,12 @@ function update(_time, delta) {
     updateShieldP2(_time);
   }
 
+  // buk power-ups (on arena layer) - one per player
+  updateBukP1(_time);
+  if (gameMode === 'twoPlayer') {
+    updateBukP2(_time);
+  }
+
   // timer
   drawTimer(_time);
 
@@ -612,6 +630,11 @@ function update(_time, delta) {
   const p1LegsColor = p1Blinking ? 0x666666 : 0x8b5a2b; // café, o gris si inmune y parpadeando
   drawPixelPerson(gPlayers, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
   
+  // Draw shield around P1 if active
+  if (p1.hasShield) {
+    drawShield(gPlayers, p1.x, p1.y, p1.size);
+  }
+  
   // P2: colores personalizados con cuerpo amarillo (only in two player mode)
   if (gameMode === 'twoPlayer') {
     const p2Color = getPlayerColor(p2, _time);
@@ -621,6 +644,11 @@ function update(_time, delta) {
     const p2BodyColor = p2Blinking ? 0x666666 : 0x8b5a2b; // amarillo
     const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
     drawPixelPerson(gPlayers, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
+    
+    // Draw shield around P2 if active
+    if (p2.hasShield) {
+      drawShield(gPlayers, p2.x, p2.y, p2.size);
+    }
   }
 
   // Position UI (always, so health bars are always visible when playing)
@@ -828,6 +856,21 @@ function drawPixelPerson(gr, x, y, s, baseColor, maskHead, maskBody, maskLegs, c
   }
 }
 
+function drawShield(gr, x, y, playerSize) {
+  // Draw a rectangular shield around the player
+  const shieldWidth = playerSize * 3.5;
+  const shieldHeight = playerSize * 3.5;
+  const shieldThickness = 3;
+  
+  // Cyan/blue shield with slight transparency
+  gr.lineStyle(shieldThickness, 0x00ffff, 0.8);
+  gr.strokeRect(x - shieldWidth / 2, y - shieldHeight / 2, shieldWidth, shieldHeight);
+  
+  // Add a subtle fill
+  gr.fillStyle(0x00ffff, 0.1);
+  gr.fillRect(x - shieldWidth / 2, y - shieldHeight / 2, shieldWidth, shieldHeight);
+}
+
 function drawScore(player) {
   const gfx = player.scoreGfx;
   gfx.clear();
@@ -950,6 +993,7 @@ function initPlayerUI(scene, player, side) {
   player.side = side;
   player.maxHealth = 100;
   player.health = player.maxHealth;
+  player.hasShield = false; // Shield from buk pickup
   player.healthGfx = scene.add.graphics();
   player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
@@ -1387,6 +1431,12 @@ function onPlayerHit(player, now, dmg = 1) {
   // In single player mode, only P1 can be hit
   if (gameMode === 'singlePlayer' && player !== p1) return;
   
+  // Check if player has shield - if so, remove shield and absorb the hit
+  if (player.hasShield) {
+    player.hasShield = false;
+    return; // Shield absorbed the hit
+  }
+  
   // Progressive damage multiplier: increases by 0.1x per round
   // Round 1: 1.0x, Round 2: 1.1x, Round 3: 1.2x, etc.
   const roundMultiplier = 1.0 + (currentRound - 1) * 0.1;
@@ -1651,6 +1701,12 @@ function startGame() {
   shieldP2 = null;
   nextShieldP1At = 0;
   nextShieldP2At = 0;
+  bukP1 = null;
+  bukP2 = null;
+  nextBukP1At = 0;
+  nextBukP2At = 0;
+  p1.hasShield = false;
+  p2.hasShield = false;
   
   // Position UI and refresh - ensure anchors are set first, then draw everything
   // positionUI sets anchors, then we explicitly draw since gameState is now 'playing'
@@ -1714,6 +1770,12 @@ function restartGame() {
   shieldP2 = null;
   nextShieldP1At = 0;
   nextShieldP2At = 0;
+  bukP1 = null;
+  bukP2 = null;
+  nextBukP1At = 0;
+  nextBukP2At = 0;
+  p1.hasShield = false;
+  p2.hasShield = false;
   
   // Position players based on game mode
   if (gameMode === 'singlePlayer') {
@@ -1778,6 +1840,10 @@ function returnToMenu() {
   shieldP2 = null;
   nextShieldP1At = 0;
   nextShieldP2At = 0;
+  bukP1 = null;
+  bukP2 = null;
+  nextBukP1At = 0;
+  nextBukP2At = 0;
   
   // Reset player positions off screen
   p1.x = 200;
@@ -1794,6 +1860,8 @@ function returnToMenu() {
   p2.progress = 0;
   p1.immuneUntil = 0;
   p2.immuneUntil = 0;
+  p1.hasShield = false;
+  p2.hasShield = false;
   
   // Clear all UI graphics
   if (p1.healthGfx) p1.healthGfx.clear();
@@ -1877,7 +1945,8 @@ function updateShieldP1(now) {
 
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
-      grantImmunity(p1, 3000, now); // 3 seconds immunity
+      p1.health = p1.maxHealth; // Fill health to 100%
+      drawHealthBar(p1);
       shieldP1 = null; 
       nextShieldP1At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
     }
@@ -1937,9 +2006,86 @@ function updateShieldP2(now) {
 
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
-      grantImmunity(p2, 3000, now); // 3 seconds immunity
+      p2.health = p2.maxHealth; // Fill health to 100%
+      drawHealthBar(p2);
       shieldP2 = null;
       nextShieldP2At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+    }
+  }
+}
+
+function updateBukP1(now) {
+  // schedule spawn if none
+  if (!bukP1) {
+    if (nextBukP1At === 0) {
+      // set an initial delay so it doesn't appear immediately
+      nextBukP1At = now + (8000 + Math.random() * 4000); // 8-12s initial spawn (longer than banana)
+    } else if (now >= nextBukP1At) {
+      spawnBukP1();
+    }
+  }
+  // draw and check pickup
+  if (bukP1) {
+    // Draw shadow for buk first
+    drawShadow(g, bukP1.x, bukP1.y, 15);
+    
+    const ps = bukP1.ps;
+    const w = BUK_LOGO[0].length * ps;
+    const h = BUK_LOGO.length * ps;
+    const sx = Math.floor(bukP1.x - w / 2);
+    const sy = Math.floor(bukP1.y - h / 2);
+    
+    // Draw cyan ".buk" text
+    g.fillStyle(0x2f4daa, 1);
+    for (let r = 0; r < BUK_LOGO.length; r++) {
+      for (let c = 0; c < BUK_LOGO[r].length; c++) {
+        if (BUK_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+
+    // pickup check for P1 only
+    if (distSq(p1.x, p1.y, bukP1.x, bukP1.y) <= (p1.size + 10) * (p1.size + 10)) {
+      p1.hasShield = true;
+      bukP1 = null; 
+      nextBukP1At = now + (8000 + Math.random() * 4000); // respawn in 8-12s
+    }
+  }
+}
+
+function updateBukP2(now) {
+  // schedule spawn if none
+  if (!bukP2) {
+    if (nextBukP2At === 0) {
+      // set an initial delay so it doesn't appear immediately
+      nextBukP2At = now + (8000 + Math.random() * 4000); // 8-12s initial spawn (longer than banana)
+    } else if (now >= nextBukP2At) {
+      spawnBukP2();
+    }
+  }
+  // draw and check pickup
+  if (bukP2) {
+    // Draw shadow for buk first
+    drawShadow(g, bukP2.x, bukP2.y, 15);
+    
+    const ps = bukP2.ps;
+    const w = BUK_LOGO[0].length * ps;
+    const h = BUK_LOGO.length * ps;
+    const sx = Math.floor(bukP2.x - w / 2);
+    const sy = Math.floor(bukP2.y - h / 2);
+    
+    // Draw cyan ".buk" text
+    g.fillStyle(0x2f4daa, 1);
+    for (let r = 0; r < BUK_LOGO.length; r++) {
+      for (let c = 0; c < BUK_LOGO[r].length; c++) {
+        if (BUK_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+
+    // pickup check for P2 only
+    if (distSq(p2.x, p2.y, bukP2.x, bukP2.y) <= (p2.size + 10) * (p2.size + 10)) {
+      p2.hasShield = true;
+      bukP2 = null;
+      nextBukP2At = now + (8000 + Math.random() * 4000); // respawn in 8-12s
     }
   }
 }
@@ -1962,6 +2108,31 @@ function spawnShieldP2() {
   // Spawn shield only in playable area (below top UI section)
   const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
   shieldP2 = { x, y, ps: 5 };
+}
+
+function spawnBukP1() {
+  const margin = 20;
+  const halfX = 400;
+  // In single player mode, spawn across full screen; otherwise in P1's half
+  let x, y;
+  if (gameMode === 'singlePlayer') {
+    x = margin + Math.random() * (800 - margin * 2);
+  } else {
+    x = margin + Math.random() * (halfX - margin * 2);
+  }
+  // Spawn buk only in playable area (below top UI section)
+  y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
+  bukP1 = { x, y, ps: 4 }; // ps: 4 for double size
+}
+
+function spawnBukP2() {
+  const margin = 20;
+  const halfX = 400;
+  // Spawn in P2's half (right side)
+  const x = halfX + margin + Math.random() * (halfX - margin * 2);
+  // Spawn buk only in playable area (below top UI section)
+  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
+  bukP2 = { x, y, ps: 4 }; // ps: 4 for double size
 }
 
 function grantImmunity(player, ms, now) {
