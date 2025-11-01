@@ -45,6 +45,9 @@ let menuUI = null; // menu UI elements
 let gameStartTime = 0; // timestamp when game started
 let currentRound = 1; // current round number
 
+// Test mode: set to true to complete patterns with just the first symbol
+const testMode = false;
+
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
   [0,0,1,0,0],
@@ -885,11 +888,16 @@ function tryStep(player, input) {
   
   if (matches) {
     player.progress++;
+    
+    // Test mode: complete pattern immediately on first correct input
+    if (testMode && player.progress === 1) {
+      player.progress = player.pattern.length;
+    }
+    
     if (player.progress >= player.pattern.length) {
       player.score++;
-      // Recover health when completing pattern (proportional to pattern length)
-      const healthRecovery = player.pattern.length * 12; // 5 health per pattern step
-      player.health = Math.min(player.maxHealth, (player.health || 0) + healthRecovery);
+      // Recover health to 100% when completing pattern
+      player.health = player.maxHealth;
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
       spawnAttackPattern(player === p1 ? 'R' : 'L', completed, player);
