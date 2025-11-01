@@ -44,6 +44,8 @@ let sceneRef = null; // reference to the scene
 let menuUI = null; // menu UI elements
 let gameStartTime = 0; // timestamp when game started
 let currentRound = 1; // current round number
+let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
+let menuSelection = 0; // 0 = single player, 1 = two player
 
 // Test mode: set to true to complete patterns with just the first symbol
 const testMode = false;
@@ -303,8 +305,20 @@ function create() {
   // Input handling for pattern steps (only arcade buttons, not movement)
   this.input.keyboard.on('keydown', (ev) => {
     if (gameState === 'menu') {
+      // Navigate menu with Up/Down or W/S
+      if (ev.code === 'ArrowUp' || ev.code === 'KeyW') {
+        menuSelection = (menuSelection - 1 + 2) % 2;
+        updateMenuSelection();
+        return;
+      }
+      if (ev.code === 'ArrowDown' || ev.code === 'KeyS') {
+        menuSelection = (menuSelection + 1) % 2;
+        updateMenuSelection();
+        return;
+      }
       // Start game with Space or Enter
       if (ev.code === 'Space' || ev.code === 'Enter') {
+        gameMode = menuSelection === 0 ? 'singlePlayer' : 'twoPlayer';
         startGame();
         return;
       }
@@ -312,6 +326,11 @@ function create() {
       // Restart with Space or Enter
       if (ev.code === 'Space' || ev.code === 'Enter') {
         restartGame();
+        return;
+      }
+      // Return to menu with ESC or M
+      if (ev.code === 'Escape' || ev.code === 'KeyM') {
+        returnToMenu();
         return;
       }
     }
@@ -354,74 +373,115 @@ function drawArenaFloor(gr, halfX) {
   gr.fillStyle(0x66ccff, 1); // light cyan/blue
   gr.fillRect(0, TOP_UI_HEIGHT - 2, 800, 4);
   
-  // Left side - Mago's arena (solid dark purple)
-  gr.fillStyle(0x1a0f2e, 1);
-  gr.fillRect(0, TOP_UI_HEIGHT, halfX, 600 - TOP_UI_HEIGHT);
-  
-  // Space-themed details for mago side (subtle)
-  // Small cross-shaped stars (yellow)
-  gr.fillStyle(0xffee88, 0.5); // light yellow
-  const magoStars = [
-    [40, 120 + TOP_UI_HEIGHT], [120, 80 + TOP_UI_HEIGHT], [200, 180 + TOP_UI_HEIGHT], [280, 250 + TOP_UI_HEIGHT], [350, 150 + TOP_UI_HEIGHT],
-    [80, 320 + TOP_UI_HEIGHT], [180, 420 + TOP_UI_HEIGHT], [300, 500 + TOP_UI_HEIGHT], [250, 380 + TOP_UI_HEIGHT], [150, 280 + TOP_UI_HEIGHT],
-    [60, 480 + TOP_UI_HEIGHT], [320, 90 + TOP_UI_HEIGHT], [230, 540 + TOP_UI_HEIGHT]
-  ];
-  for (const [x, y] of magoStars) {
-    // Draw cross shape (5 pixels)
-    const ps = 2;
-    gr.fillRect(x, y - ps, ps, ps); // top
-    gr.fillRect(x - ps, y, ps, ps); // left
-    gr.fillRect(x, y, ps, ps); // center
-    gr.fillRect(x + ps, y, ps, ps); // right
-    gr.fillRect(x, y + ps, ps, ps); // bottom
+  if (gameMode === 'singlePlayer') {
+    // Single player: full space arena (mago theme)
+    gr.fillStyle(0x1a0f2e, 1);
+    gr.fillRect(0, TOP_UI_HEIGHT, 800, 600 - TOP_UI_HEIGHT);
+    
+    // Space-themed details across full screen
+    gr.fillStyle(0xffee88, 0.5); // light yellow stars
+    const magoStars = [
+      [40, 120 + TOP_UI_HEIGHT], [120, 80 + TOP_UI_HEIGHT], [200, 180 + TOP_UI_HEIGHT], [280, 250 + TOP_UI_HEIGHT], [350, 150 + TOP_UI_HEIGHT],
+      [80, 320 + TOP_UI_HEIGHT], [180, 420 + TOP_UI_HEIGHT], [300, 500 + TOP_UI_HEIGHT], [250, 380 + TOP_UI_HEIGHT], [150, 280 + TOP_UI_HEIGHT],
+      [60, 480 + TOP_UI_HEIGHT], [320, 90 + TOP_UI_HEIGHT], [230, 540 + TOP_UI_HEIGHT],
+      // Add more stars for right side
+      [440, 120 + TOP_UI_HEIGHT], [520, 80 + TOP_UI_HEIGHT], [600, 180 + TOP_UI_HEIGHT], [680, 250 + TOP_UI_HEIGHT], [750, 150 + TOP_UI_HEIGHT],
+      [480, 320 + TOP_UI_HEIGHT], [580, 420 + TOP_UI_HEIGHT], [700, 500 + TOP_UI_HEIGHT], [650, 380 + TOP_UI_HEIGHT], [550, 280 + TOP_UI_HEIGHT],
+      [460, 480 + TOP_UI_HEIGHT], [720, 90 + TOP_UI_HEIGHT], [630, 540 + TOP_UI_HEIGHT]
+    ];
+    for (const [x, y] of magoStars) {
+      // Draw cross shape (5 pixels)
+      const ps = 2;
+      gr.fillRect(x, y - ps, ps, ps); // top
+      gr.fillRect(x - ps, y, ps, ps); // left
+      gr.fillRect(x, y, ps, ps); // center
+      gr.fillRect(x + ps, y, ps, ps); // right
+      gr.fillRect(x, y + ps, ps, ps); // bottom
+    }
+    
+    // Asteroids across full screen
+    gr.fillStyle(0x8b7355, 0.4); // light brown
+    const asteroids = [
+      [100, 200 + TOP_UI_HEIGHT], [240, 350 + TOP_UI_HEIGHT], [340, 480 + TOP_UI_HEIGHT], [70, 440 + TOP_UI_HEIGHT], [300, 140 + TOP_UI_HEIGHT],
+      [500, 200 + TOP_UI_HEIGHT], [640, 350 + TOP_UI_HEIGHT], [740, 480 + TOP_UI_HEIGHT], [470, 440 + TOP_UI_HEIGHT], [700, 140 + TOP_UI_HEIGHT]
+    ];
+    for (const [ax, ay] of asteroids) {
+      // Draw small pixelated asteroid
+      gr.fillRect(ax, ay, 8, 8);
+      gr.fillRect(ax + 8, ay + 4, 4, 4);
+      gr.fillRect(ax - 4, ay + 4, 4, 4);
+    }
+  } else {
+    // Two player mode: split arena
+    // Left side - Mago's arena (solid dark purple)
+    gr.fillStyle(0x1a0f2e, 1);
+    gr.fillRect(0, TOP_UI_HEIGHT, halfX, 600 - TOP_UI_HEIGHT);
+    
+    // Space-themed details for mago side (subtle)
+    // Small cross-shaped stars (yellow)
+    gr.fillStyle(0xffee88, 0.5); // light yellow
+    const magoStars = [
+      [40, 120 + TOP_UI_HEIGHT], [120, 80 + TOP_UI_HEIGHT], [200, 180 + TOP_UI_HEIGHT], [280, 250 + TOP_UI_HEIGHT], [350, 150 + TOP_UI_HEIGHT],
+      [80, 320 + TOP_UI_HEIGHT], [180, 420 + TOP_UI_HEIGHT], [300, 500 + TOP_UI_HEIGHT], [250, 380 + TOP_UI_HEIGHT], [150, 280 + TOP_UI_HEIGHT],
+      [60, 480 + TOP_UI_HEIGHT], [320, 90 + TOP_UI_HEIGHT], [230, 540 + TOP_UI_HEIGHT]
+    ];
+    for (const [x, y] of magoStars) {
+      // Draw cross shape (5 pixels)
+      const ps = 2;
+      gr.fillRect(x, y - ps, ps, ps); // top
+      gr.fillRect(x - ps, y, ps, ps); // left
+      gr.fillRect(x, y, ps, ps); // center
+      gr.fillRect(x + ps, y, ps, ps); // right
+      gr.fillRect(x, y + ps, ps, ps); // bottom
+    }
+    
+    // Asteroids (small pixel rocks) - light brown
+    gr.fillStyle(0x8b7355, 0.4); // light brown
+    const asteroids = [
+      [100, 200 + TOP_UI_HEIGHT], [240, 350 + TOP_UI_HEIGHT], [340, 480 + TOP_UI_HEIGHT], [70, 440 + TOP_UI_HEIGHT], [300, 140 + TOP_UI_HEIGHT]
+    ];
+    for (const [ax, ay] of asteroids) {
+      // Draw small pixelated asteroid
+      gr.fillRect(ax, ay, 8, 8);
+      gr.fillRect(ax + 8, ay + 4, 4, 4);
+      gr.fillRect(ax - 4, ay + 4, 4, 4);
+    }
+    
+    // Right side - Skeleton's arena (solid brown earth color)
+    gr.fillStyle(0x3d2817, 1); // darker earth brown
+    gr.fillRect(halfX, TOP_UI_HEIGHT, halfX, 600 - TOP_UI_HEIGHT);
+    
+    // Earth-themed details for skeleton side (subtle)
+    // Small grass patches
+    gr.fillStyle(0x2d5016, 0.6); // dark green
+    const grassPatches = [
+      [450, 140 + TOP_UI_HEIGHT], [550, 240 + TOP_UI_HEIGHT], [650, 180 + TOP_UI_HEIGHT], [720, 320 + TOP_UI_HEIGHT], [480, 380 + TOP_UI_HEIGHT],
+      [620, 450 + TOP_UI_HEIGHT], [740, 520 + TOP_UI_HEIGHT], [520, 520 + TOP_UI_HEIGHT], [680, 100 + TOP_UI_HEIGHT], [580, 340 + TOP_UI_HEIGHT]
+    ];
+    for (const [gx, gy] of grassPatches) {
+      // Small grass patch (pixelated)
+      gr.fillRect(gx, gy + 8, 12, 3);
+      gr.fillRect(gx + 2, gy + 5, 8, 3);
+      gr.fillRect(gx + 4, gy + 2, 4, 3);
+    }
+    
+    // Small bones scattered
+    gr.fillStyle(0x8a7a6a, 0.5); // bone color
+    const bonePositions = [
+      [470, 200 + TOP_UI_HEIGHT], [590, 300 + TOP_UI_HEIGHT], [710, 420 + TOP_UI_HEIGHT], [530, 480 + TOP_UI_HEIGHT], [660, 260 + TOP_UI_HEIGHT],
+      [750, 150 + TOP_UI_HEIGHT], [440, 540 + TOP_UI_HEIGHT], [610, 90 + TOP_UI_HEIGHT]
+    ];
+    for (const [bx, by] of bonePositions) {
+      // Tiny bone shape (horizontal)
+      gr.fillRect(bx, by + 2, 10, 2);
+      gr.fillRect(bx - 1, by, 3, 6);
+      gr.fillRect(bx + 8, by, 3, 6);
+    }
+    
+    // Middle divider - solid cyan/light blue (only in playable area)
+    gr.fillStyle(0x66ccff, 1); // light cyan/blue
+    gr.fillRect(halfX - 2, TOP_UI_HEIGHT, 4, 600 - TOP_UI_HEIGHT);
   }
-  
-  // Asteroids (small pixel rocks) - light brown
-  gr.fillStyle(0x8b7355, 0.4); // light brown
-  const asteroids = [
-    [100, 200 + TOP_UI_HEIGHT], [240, 350 + TOP_UI_HEIGHT], [340, 480 + TOP_UI_HEIGHT], [70, 440 + TOP_UI_HEIGHT], [300, 140 + TOP_UI_HEIGHT]
-  ];
-  for (const [ax, ay] of asteroids) {
-    // Draw small pixelated asteroid
-    gr.fillRect(ax, ay, 8, 8);
-    gr.fillRect(ax + 8, ay + 4, 4, 4);
-    gr.fillRect(ax - 4, ay + 4, 4, 4);
-  }
-  
-  // Right side - Skeleton's arena (solid brown earth color)
-  gr.fillStyle(0x3d2817, 1); // darker earth brown
-  gr.fillRect(halfX, TOP_UI_HEIGHT, halfX, 600 - TOP_UI_HEIGHT);
-  
-  // Earth-themed details for skeleton side (subtle)
-  // Small grass patches
-  gr.fillStyle(0x2d5016, 0.6); // dark green
-  const grassPatches = [
-    [450, 140 + TOP_UI_HEIGHT], [550, 240 + TOP_UI_HEIGHT], [650, 180 + TOP_UI_HEIGHT], [720, 320 + TOP_UI_HEIGHT], [480, 380 + TOP_UI_HEIGHT],
-    [620, 450 + TOP_UI_HEIGHT], [740, 520 + TOP_UI_HEIGHT], [520, 520 + TOP_UI_HEIGHT], [680, 100 + TOP_UI_HEIGHT], [580, 340 + TOP_UI_HEIGHT]
-  ];
-  for (const [gx, gy] of grassPatches) {
-    // Small grass patch (pixelated)
-    gr.fillRect(gx, gy + 8, 12, 3);
-    gr.fillRect(gx + 2, gy + 5, 8, 3);
-    gr.fillRect(gx + 4, gy + 2, 4, 3);
-  }
-  
-  // Small bones scattered
-  gr.fillStyle(0x8a7a6a, 0.5); // bone color
-  const bonePositions = [
-    [470, 200 + TOP_UI_HEIGHT], [590, 300 + TOP_UI_HEIGHT], [710, 420 + TOP_UI_HEIGHT], [530, 480 + TOP_UI_HEIGHT], [660, 260 + TOP_UI_HEIGHT],
-    [750, 150 + TOP_UI_HEIGHT], [440, 540 + TOP_UI_HEIGHT], [610, 90 + TOP_UI_HEIGHT]
-  ];
-  for (const [bx, by] of bonePositions) {
-    // Tiny bone shape (horizontal)
-    gr.fillRect(bx, by + 2, 10, 2);
-    gr.fillRect(bx - 1, by, 3, 6);
-    gr.fillRect(bx + 8, by, 3, 6);
-  }
-  
-  // Middle divider - solid cyan/light blue (only in playable area)
-  gr.fillStyle(0x66ccff, 1); // light cyan/blue
-  gr.fillRect(halfX - 2, TOP_UI_HEIGHT, 4, 600 - TOP_UI_HEIGHT);
 }
 
 function update(_time, delta) {
@@ -433,6 +493,7 @@ function update(_time, delta) {
     const scale = 1 + Math.sin(_time / 200) * 0.1; // pulsate between 0.9 and 1.1
     if (gameOverText.winnerText) gameOverText.winnerText.setScale(scale);
     if (gameOverText.loserText) gameOverText.loserText.setScale(scale);
+    if (gameOverText.gameOverTitle) gameOverText.gameOverTitle.setScale(scale);
   }
 
   // Don't update game if in menu
@@ -476,13 +537,21 @@ function update(_time, delta) {
     const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.3;
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
-    p2.health = Math.max(0, (p2.health || 0) - healthDrainRate * p2DrainMultiplier * dt);
+    if (gameMode === 'twoPlayer') {
+      p2.health = Math.max(0, (p2.health || 0) - healthDrainRate * p2DrainMultiplier * dt);
+    }
     
     // Check for game over from health drain
-    if (p1.health <= 0) {
-      endGame(p2, p1);
-    } else if (p2.health <= 0) {
-      endGame(p1, p2);
+    if (gameMode === 'singlePlayer') {
+      if (p1.health <= 0) {
+        endGame(p1, p1); // In single player, just pass p1 for both
+      }
+    } else {
+      if (p1.health <= 0) {
+        endGame(p2, p1);
+      } else if (p2.health <= 0) {
+        endGame(p1, p2);
+      }
     }
   }
 
@@ -490,10 +559,18 @@ function update(_time, delta) {
   const m1 = p1.size;
   const m2 = p2.size;
   const topLimit = TOP_UI_HEIGHT + m1; // Top limit: UI height + player size
-  p1.x = Phaser.Math.Clamp(p1.x, m1, half - m1);
-  p2.x = Phaser.Math.Clamp(p2.x, half + m2, 800 - m2);
-  p1.y = Phaser.Math.Clamp(p1.y, topLimit, 600 - m1);
-  p2.y = Phaser.Math.Clamp(p2.y, TOP_UI_HEIGHT + m2, 600 - m2);
+  
+  if (gameMode === 'singlePlayer') {
+    // Single player: mage can move across full screen
+    p1.x = Phaser.Math.Clamp(p1.x, m1, 800 - m1);
+    p1.y = Phaser.Math.Clamp(p1.y, topLimit, 600 - m1);
+  } else {
+    // Two player: constrain to halves
+    p1.x = Phaser.Math.Clamp(p1.x, m1, half - m1);
+    p2.x = Phaser.Math.Clamp(p2.x, half + m2, 800 - m2);
+    p1.y = Phaser.Math.Clamp(p1.y, topLimit, 600 - m1);
+    p2.y = Phaser.Math.Clamp(p2.y, TOP_UI_HEIGHT + m2, 600 - m2);
+  }
 
   // Draw
   g.clear();
@@ -508,15 +585,19 @@ function update(_time, delta) {
   // Arena floor design
   drawArenaFloor(g, half);
   
-  // Draw shadow only for player 2 (skeleton) - on arena layer
-  drawShadow(g, p2.x, p2.y, p2.size);
+  // Draw shadow only for player 2 (skeleton) in two player mode - on arena layer
+  if (gameMode === 'twoPlayer') {
+    drawShadow(g, p2.x, p2.y, p2.size);
+  }
 
   // move and draw projectiles (on arena layer)
   updateProjectiles(dt, _time);
 
   // shield power-ups (on arena layer) - one per player
   updateShieldP1(_time);
-  updateShieldP2(_time);
+  if (gameMode === 'twoPlayer') {
+    updateShieldP2(_time);
+  }
 
   // timer
   drawTimer(_time);
@@ -531,25 +612,33 @@ function update(_time, delta) {
   const p1LegsColor = p1Blinking ? 0x666666 : 0x8b5a2b; // café, o gris si inmune y parpadeando
   drawPixelPerson(gPlayers, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
   
-  // P2: colores personalizados con cuerpo amarillo
-  const p2Color = getPlayerColor(p2, _time);
-  const p2IsImmune = (p2.immuneUntil && _time < p2.immuneUntil);
-  const p2Blinking = p2IsImmune && (Math.floor(_time / 120) % 2 === 1);
-  const p2HeadColor = p2Blinking ? 0x666666 : 0xf0f0f0; // blanco/gris claro
-  const p2BodyColor = p2Blinking ? 0x666666 : 0x8b5a2b; // amarillo
-  const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
-  drawPixelPerson(gPlayers, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
+  // P2: colores personalizados con cuerpo amarillo (only in two player mode)
+  if (gameMode === 'twoPlayer') {
+    const p2Color = getPlayerColor(p2, _time);
+    const p2IsImmune = (p2.immuneUntil && _time < p2.immuneUntil);
+    const p2Blinking = p2IsImmune && (Math.floor(_time / 120) % 2 === 1);
+    const p2HeadColor = p2Blinking ? 0x666666 : 0xf0f0f0; // blanco/gris claro
+    const p2BodyColor = p2Blinking ? 0x666666 : 0x8b5a2b; // amarillo
+    const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
+    drawPixelPerson(gPlayers, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
+  }
 
   // Position UI (always, so health bars are always visible when playing)
   if (gameState === 'playing') {
     positionUI(p1);
-    positionUI(p2);
+    if (gameMode === 'twoPlayer') {
+      positionUI(p2);
+    }
     
     // Update health bars and pattern UI (only show when playing)
     drawHealthBar(p1);
-    drawHealthBar(p2);
+    if (gameMode === 'twoPlayer') {
+      drawHealthBar(p2);
+    }
     drawPatternUI(p1);
-    drawPatternUI(p2);
+    if (gameMode === 'twoPlayer') {
+      drawPatternUI(p2);
+    }
   } else {
     // Hide health bars, patterns, and scores when game is not playing
     p1.healthGfx.clear();
@@ -820,8 +909,11 @@ function initPlayerUI(scene, player, side) {
   player.patternGfx.setDepth(50); // Above arena (10) but below players (100)
   player.scoreGfx = scene.add.graphics();
   player.scoreGfx.setDepth(50); // Above arena (10) but below players (100)
+  
+  // Set score position (will be updated in positionUI for single player)
   player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
   player.scoreAlignRight = side === 'R';
+  
   // fixed positions at the top of each half
   positionUI(player);
   refreshPatternTexts(player);
@@ -880,6 +972,10 @@ function refreshPatternTexts(player) {
 
 function tryStep(player, input) {
   if (!player.pattern || gameState !== 'playing') return;
+  
+  // In single player mode, only P1 can play
+  if (gameMode === 'singlePlayer' && player !== p1) return;
+  
   const want = player.pattern[player.progress];
   
   // Patterns only contain arcade buttons A, B, C
@@ -900,7 +996,9 @@ function tryStep(player, input) {
       player.health = player.maxHealth;
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
-      spawnAttackPattern(player === p1 ? 'R' : 'L', completed, player);
+      // In single player mode, spawn projectiles targeting the same player
+      const targetSide = (gameMode === 'singlePlayer') ? 'L' : (player === p1 ? 'R' : 'L');
+      spawnAttackPattern(targetSide, completed, player);
       player.pattern = makePattern();
       player.progress = 0;
     }
@@ -916,7 +1014,20 @@ function positionUI(player) {
   // Health bar at top, pattern below it (closer spacing)
   const healthY = 35; // health bar position (top of screen)
   const patY = 90; // pattern below health bar
-  const centerX = player.side === 'L' ? 200 : 600;
+  
+  // In single player mode, center P1's UI
+  let centerX;
+  if (gameMode === 'singlePlayer' && player === p1) {
+    centerX = 400; // center of screen
+    // Also center the score
+    player.scoreAnchor = { x: 20, y: 20 };
+    player.scoreAlignRight = false;
+  } else {
+    centerX = player.side === 'L' ? 200 : 600;
+    // Reset score position for two player mode
+    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: 20 };
+    player.scoreAlignRight = player.side === 'R';
+  }
   
   player.patternText.setPosition(centerX, patY); // no visible content, kept for anchor
   player.patternAnchor = { x: centerX, y: patY };
@@ -1027,48 +1138,70 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
   const arr = targetSide === 'L' ? projL : projR;
   const isP1 = (attacker === p1);
   
-  for (let i = 0; i < pattern.length; i++) {
-    let d = pattern[i];
-    // Convert buttons to their mapped directions
-    // A = Left, B = Up or Down (random), C = Right
-    if (d === 'A') {
-      d = 'L';
-    } else if (d === 'B') {
-      d = Math.random() < 0.5 ? 'U' : 'D'; // Random up or down
-    } else if (d === 'C') {
-      d = 'R';
-    }
-    // Only spawn projectiles for movement directions
-    if (DIRS.includes(d)) {
-      const p = createProjectile(targetSide, d);
-      
-      // 15% probability for double damage attack
-      if (Math.random() < 0.15) {
-        p.dmg = 2;
-        p.ps = 10;
-        if (isP1) {
-          // P1 (mago): star
-          p.type = 'star';
-          p.color = 0xffff00; // yellow star
-        } else {
-          // P2 (skeleton): stone ball
-          p.type = 'stone';
-          p.color = 0x666666; // gray stone
-        }
-      } else {
-        // Normal attacks
-        p.ps = 8;
-        if (isP1) {
-          // P1 (mago): fireball
-          p.type = 'fire';
-          p.color = 0xff6a00; // fiery orange
-        } else {
-          // P2 (skeleton): bone
-          p.type = 'bone';
-          p.color = 0xeeeeee; // white bone
-        }
+  // In single player mode, double the number of projectiles
+  const repetitions = (gameMode === 'singlePlayer' && isP1) ? 2 : 1;
+  
+  for (let rep = 0; rep < repetitions; rep++) {
+    for (let i = 0; i < pattern.length; i++) {
+      let d = pattern[i];
+      // Convert buttons to their mapped directions
+      // A = Left, B = Up or Down (random), C = Right
+      if (d === 'A') {
+        d = 'L';
+      } else if (d === 'B') {
+        d = Math.random() < 0.5 ? 'U' : 'D'; // Random up or down
+      } else if (d === 'C') {
+        d = 'R';
       }
-      arr.push(p);
+      // Only spawn projectiles for movement directions
+      if (DIRS.includes(d)) {
+        const p = createProjectile(targetSide, d);
+        
+        // In single player mode, always use skeleton design (bones)
+        if (gameMode === 'singlePlayer' && isP1) {
+          // 15% probability for double damage attack (stone ball)
+          if (Math.random() < 0.15) {
+            p.dmg = 2;
+            p.ps = 10;
+            p.type = 'stone';
+            p.color = 0x666666; // gray stone
+          } else {
+            // Normal attack (bone)
+            p.ps = 8;
+            p.type = 'bone';
+            p.color = 0xeeeeee; // white bone
+          }
+        } else {
+          // Two player mode: use normal projectile designs
+          // 15% probability for double damage attack
+          if (Math.random() < 0.15) {
+            p.dmg = 2;
+            p.ps = 10;
+            if (isP1) {
+              // P1 (mago): star
+              p.type = 'star';
+              p.color = 0xffff00; // yellow star
+            } else {
+              // P2 (skeleton): stone ball
+              p.type = 'stone';
+              p.color = 0x666666; // gray stone
+            }
+          } else {
+            // Normal attacks
+            p.ps = 8;
+            if (isP1) {
+              // P1 (mago): fireball
+              p.type = 'fire';
+              p.color = 0xff6a00; // fiery orange
+            } else {
+              // P2 (skeleton): bone
+              p.type = 'bone';
+              p.color = 0xeeeeee; // white bone
+            }
+          }
+        }
+        arr.push(p);
+      }
     }
   }
 }
@@ -1083,7 +1216,17 @@ function createProjectile(side, dir) {
   const bottomBound = 600;
   const playableHeight = bottomBound - topBound;
   let x = 0, y = 0, vx = 0, vy = 0;
-  if (side === 'R') {
+  
+  // In single player mode, spawn projectiles across the full screen
+  if (gameMode === 'singlePlayer') {
+    // Full screen spawning
+    switch (dir) {
+      case 'U': x = margin + Math.random() * (800 - margin * 2); y = bottomBound + 16; vx = 0; vy = -baseSpeed; break;
+      case 'D': x = margin + Math.random() * (800 - margin * 2); y = topBound - 16; vx = 0; vy = baseSpeed; break;
+      case 'R': x = -16; y = topBound + margin + Math.random() * (playableHeight - margin * 2); vx = baseSpeed; vy = 0; break;
+      case 'L': x = 800 + 16; y = topBound + margin + Math.random() * (playableHeight - margin * 2); vx = -baseSpeed; vy = 0; break;
+    }
+  } else if (side === 'R') {
     // right half: x in [halfX, 800]
     switch (dir) {
       case 'U': x = halfX + margin + Math.random() * (800 - halfX - margin * 2); y = bottomBound + 16; vx = 0; vy = -baseSpeed; break;
@@ -1155,8 +1298,17 @@ function updateProjectiles(dt, now) {
         continue;
       }
       // cull when out of bounds (respect top UI section)
-      if (p.y < TOP_UI_HEIGHT - 24 || p.y > 624 || (side === 'L' && (p.x < -24 || p.x > halfX + 24)) || (side === 'R' && (p.x < halfX - 24 || p.x > 824))) {
-        arr.splice(i, 1);
+      // In single player mode, projectiles can travel across the entire screen
+      if (gameMode === 'singlePlayer') {
+        // Full screen bounds for single player
+        if (p.y < TOP_UI_HEIGHT - 24 || p.y > 624 || p.x < -24 || p.x > 824) {
+          arr.splice(i, 1);
+        }
+      } else {
+        // Two player mode: restrict to halves
+        if (p.y < TOP_UI_HEIGHT - 24 || p.y > 624 || (side === 'L' && (p.x < -24 || p.x > halfX + 24)) || (side === 'R' && (p.x < halfX - 24 || p.x > 824))) {
+          arr.splice(i, 1);
+        }
       }
     }
   };
@@ -1180,6 +1332,9 @@ function onPlayerHit(player, now, dmg = 1) {
   if (player.immuneUntil && now < player.immuneUntil) return;
   if (gameState !== 'playing') return;
   
+  // In single player mode, only P1 can be hit
+  if (gameMode === 'singlePlayer' && player !== p1) return;
+  
   // Progressive damage multiplier: increases by 0.1x per round
   // Round 1: 1.0x, Round 2: 1.1x, Round 3: 1.2x, etc.
   const roundMultiplier = 1.0 + (currentRound - 1) * 0.1;
@@ -1196,7 +1351,11 @@ function onPlayerHit(player, now, dmg = 1) {
   
   // Check for game over
   if (player.health <= 0) {
-    endGame(player === p1 ? p2 : p1, player);
+    if (gameMode === 'singlePlayer') {
+      endGame(p1, p1); // In single player, just pass p1 for both
+    } else {
+      endGame(player === p1 ? p2 : p1, player);
+    }
   }
 }
 
@@ -1208,31 +1367,65 @@ function endGame(winner, loser) {
   const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
   overlay.setDepth(2000);
   
-  // Winner message
-  const winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 250, 'Winner', {
-    fontSize: '64px',
+  let winnerText = null;
+  let loserText = null;
+  let gameOverTitle = null;
+  
+  if (gameMode === 'singlePlayer') {
+    // Single player: Game Over message
+    gameOverTitle = sceneRef.add.text(400, 200, 'Game Over', {
+      fontSize: '64px',
+      fontFamily: 'Arial',
+      color: '#ff0000',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+    
+    // Show score
+    const finalScore = sceneRef.add.text(400, 280, 'Puntaje Final: ' + (p1.score || 0), {
+      fontSize: '36px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+    
+    gameOverText = { overlay, gameOverTitle, finalScore };
+  } else {
+    // Two player mode: Winner/Loser messages
+    winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 250, 'Winner', {
+      fontSize: '64px',
+      fontFamily: 'Arial',
+      color: '#00ff00',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+    
+    loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 250, 'Loser', {
+      fontSize: '64px',
+      fontFamily: 'Arial',
+      color: '#ff0000',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+    
+    gameOverText = { overlay, winnerText, loserText };
+  }
+  
+  // Restart button (default option)
+  const restartText = sceneRef.add.text(400, 380, 'Presiona ESPACIO o ENTER para Reiniciar', {
+    fontSize: '24px',
     fontFamily: 'Arial',
     color: '#00ff00',
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(2001);
   
-  // Loser message
-  const loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 250, 'Loser', {
-    fontSize: '64px',
+  // Menu button
+  const menuText = sceneRef.add.text(400, 430, 'Presiona ESC o M para volver al Menú', {
+    fontSize: '24px',
     fontFamily: 'Arial',
-    color: '#ff0000',
+    color: '#aaaaaa',
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(2001);
   
-  // Restart button
-  const restartText = sceneRef.add.text(400, 400, 'Presiona ESPACIO o ENTER para Reiniciar', {
-    fontSize: '28px',
-    fontFamily: 'Arial',
-    color: '#ffffff',
-    fontWeight: 'bold'
-  }).setOrigin(0.5).setDepth(2001);
-  
-  gameOverText = { overlay, winnerText, loserText, restartText };
+  gameOverText.restartText = restartText;
+  gameOverText.menuText = menuText;
 }
 
 function showMenu() {
@@ -1242,35 +1435,80 @@ function showMenu() {
   const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
   
   // Title
-  const title = sceneRef.add.text(400, 150, 'SPLIT ARENA DUO', {
+  const title = sceneRef.add.text(400, 120, 'SPLIT ARENA DUO', {
     fontSize: '64px',
     fontFamily: 'Arial',
     color: '#ffffff',
     fontWeight: 'bold'
   }).setOrigin(0.5);
   
-  // Start button
-  const startText = sceneRef.add.text(400, 350, 'Presiona ESPACIO o ENTER para Empezar', {
+  // Mode selection title
+  const modeTitle = sceneRef.add.text(400, 220, 'Selecciona Modo de Juego:', {
+    fontSize: '32px',
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    fontWeight: 'bold'
+  }).setOrigin(0.5);
+  
+  // Single player option
+  const singlePlayerText = sceneRef.add.text(400, 290, 'Un Jugador (Mago)', {
     fontSize: '28px',
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    fontWeight: 'bold'
+  }).setOrigin(0.5);
+  
+  // Two player option
+  const twoPlayerText = sceneRef.add.text(400, 340, 'Dos Jugadores', {
+    fontSize: '28px',
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    fontWeight: 'bold'
+  }).setOrigin(0.5);
+  
+  // Navigation instructions
+  const navInstr = sceneRef.add.text(400, 410, 'Usa W/S o Flechas para navegar', {
+    fontSize: '20px',
+    fontFamily: 'Arial',
+    color: '#aaaaaa'
+  }).setOrigin(0.5);
+  
+  // Start button
+  const startText = sceneRef.add.text(400, 460, 'Presiona ESPACIO o ENTER para Empezar', {
+    fontSize: '24px',
     fontFamily: 'Arial',
     color: '#00ff00',
     fontWeight: 'bold'
   }).setOrigin(0.5);
   
   // Instructions
-  const instr1 = sceneRef.add.text(400, 450, 'P1: WASD (movimiento) + ZXC (botones)', {
-    fontSize: '20px',
+  const instr1 = sceneRef.add.text(400, 520, 'P1: WASD (movimiento) + ZXC (botones)', {
+    fontSize: '18px',
     fontFamily: 'Arial',
     color: '#8899ff'
   }).setOrigin(0.5);
   
-  const instr2 = sceneRef.add.text(400, 480, 'P2: FLECHAS (movimiento) + 123 (botones)', {
-    fontSize: '20px',
+  const instr2 = sceneRef.add.text(400, 550, 'P2: FLECHAS (movimiento) + 123 (botones)', {
+    fontSize: '18px',
     fontFamily: 'Arial',
     color: '#ffdd00'
   }).setOrigin(0.5);
   
-  menuUI = { overlay, title, startText, instr1, instr2 };
+  menuUI = { overlay, title, modeTitle, singlePlayerText, twoPlayerText, navInstr, startText, instr1, instr2 };
+  updateMenuSelection();
+}
+
+function updateMenuSelection() {
+  if (!menuUI) return;
+  
+  // Update colors based on selection
+  if (menuSelection === 0) {
+    menuUI.singlePlayerText.setColor('#00ff00');
+    menuUI.twoPlayerText.setColor('#ffffff');
+  } else {
+    menuUI.singlePlayerText.setColor('#ffffff');
+    menuUI.twoPlayerText.setColor('#00ff00');
+  }
 }
 
 function startGame() {
@@ -1280,16 +1518,25 @@ function startGame() {
   if (menuUI) {
     menuUI.overlay.destroy();
     menuUI.title.destroy();
+    if (menuUI.modeTitle) menuUI.modeTitle.destroy();
+    if (menuUI.singlePlayerText) menuUI.singlePlayerText.destroy();
+    if (menuUI.twoPlayerText) menuUI.twoPlayerText.destroy();
+    if (menuUI.navInstr) menuUI.navInstr.destroy();
     menuUI.startText.destroy();
     menuUI.instr1.destroy();
     menuUI.instr2.destroy();
     menuUI = null;
   }
   
-  // Show controls
+  // Show controls based on mode
   sceneRef.children.list.forEach(child => {
     if (child.name === 'controls') {
-      child.setVisible(true);
+      // Only show P2 controls in two player mode
+      if (child.text && child.text.includes('P2')) {
+        child.setVisible(gameMode === 'twoPlayer');
+      } else {
+        child.setVisible(true);
+      }
     }
   });
   
@@ -1307,11 +1554,23 @@ function startGame() {
   p2.pattern = makePattern();
   p1.immuneUntil = 0;
   p2.immuneUntil = 0;
-  // Position players in center of playable area
-  p1.x = 200;
-  p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2; // Center of playable area
-  p2.x = 600;
-  p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2; // Center of playable area
+  
+  // Position players based on mode
+  if (gameMode === 'singlePlayer') {
+    // Single player: mage in center of full screen
+    p1.x = 400;
+    p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+    // P2 is not visible/active in single player
+    p2.x = 2000; // move off screen
+    p2.y = 2000;
+  } else {
+    // Two player: position in their respective halves
+    p1.x = 200;
+    p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+    p2.x = 600;
+    p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+  }
+  
   projL = [];
   projR = [];
   shieldP1 = null;
@@ -1322,16 +1581,26 @@ function startGame() {
   // Position UI and refresh - ensure anchors are set first, then draw everything
   // positionUI sets anchors, then we explicitly draw since gameState is now 'playing'
   positionUI(p1);
-  positionUI(p2);
+  if (gameMode === 'twoPlayer') {
+    positionUI(p2);
+  }
   // Now explicitly draw everything
   drawHealthBar(p1);
-  drawHealthBar(p2);
+  if (gameMode === 'twoPlayer') {
+    drawHealthBar(p2);
+  }
   drawPatternUI(p1);
-  drawPatternUI(p2);
+  if (gameMode === 'twoPlayer') {
+    drawPatternUI(p2);
+  }
   refreshPatternTexts(p1);
-  refreshPatternTexts(p2);
+  if (gameMode === 'twoPlayer') {
+    refreshPatternTexts(p2);
+  }
   drawScore(p1);
-  drawScore(p2);
+  if (gameMode === 'twoPlayer') {
+    drawScore(p2);
+  }
 }
 
 function restartGame() {
@@ -1342,7 +1611,10 @@ function restartGame() {
     if (gameOverText.overlay) gameOverText.overlay.destroy();
     if (gameOverText.winnerText) gameOverText.winnerText.destroy();
     if (gameOverText.loserText) gameOverText.loserText.destroy();
+    if (gameOverText.gameOverTitle) gameOverText.gameOverTitle.destroy();
+    if (gameOverText.finalScore) gameOverText.finalScore.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
+    if (gameOverText.menuText) gameOverText.menuText.destroy();
     gameOverText = null;
   }
   
@@ -1369,24 +1641,106 @@ function restartGame() {
   nextShieldP1At = 0;
   nextShieldP2At = 0;
   
-  // Position players in center of playable area
-  p1.x = 200;
-  p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
-  p2.x = 600;
-  p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+  // Position players based on game mode
+  if (gameMode === 'singlePlayer') {
+    p1.x = 400;
+    p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+    p2.x = 2000;
+    p2.y = 2000;
+  } else {
+    p1.x = 200;
+    p1.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+    p2.x = 600;
+    p2.y = TOP_UI_HEIGHT + (600 - TOP_UI_HEIGHT) / 2;
+  }
   
   // Position UI and refresh - ensure anchors are set first, then draw everything
   positionUI(p1);
-  positionUI(p2);
+  if (gameMode === 'twoPlayer') {
+    positionUI(p2);
+  }
   // Now explicitly draw everything since gameState is 'playing'
   drawHealthBar(p1);
-  drawHealthBar(p2);
+  if (gameMode === 'twoPlayer') {
+    drawHealthBar(p2);
+  }
   drawPatternUI(p1);
-  drawPatternUI(p2);
+  if (gameMode === 'twoPlayer') {
+    drawPatternUI(p2);
+  }
   refreshPatternTexts(p1);
-  refreshPatternTexts(p2);
+  if (gameMode === 'twoPlayer') {
+    refreshPatternTexts(p2);
+  }
   drawScore(p1);
-  drawScore(p2);
+  if (gameMode === 'twoPlayer') {
+    drawScore(p2);
+  }
+}
+
+function returnToMenu() {
+  if (!sceneRef || gameState !== 'gameOver') return;
+  
+  // Clean up game over UI
+  if (gameOverText) {
+    if (gameOverText.overlay) gameOverText.overlay.destroy();
+    if (gameOverText.winnerText) gameOverText.winnerText.destroy();
+    if (gameOverText.loserText) gameOverText.loserText.destroy();
+    if (gameOverText.gameOverTitle) gameOverText.gameOverTitle.destroy();
+    if (gameOverText.finalScore) gameOverText.finalScore.destroy();
+    if (gameOverText.restartText) gameOverText.restartText.destroy();
+    if (gameOverText.menuText) gameOverText.menuText.destroy();
+    gameOverText = null;
+  }
+  
+  // Reset game state FIRST before showing menu
+  gameState = 'menu';
+  menuSelection = 0; // Reset to single player
+  
+  // Clear all projectiles
+  projL = [];
+  projR = [];
+  shieldP1 = null;
+  shieldP2 = null;
+  nextShieldP1At = 0;
+  nextShieldP2At = 0;
+  
+  // Reset player positions off screen
+  p1.x = 200;
+  p1.y = 350;
+  p2.x = 600;
+  p2.y = 350;
+  
+  // Reset player state
+  p1.score = 0;
+  p2.score = 0;
+  p1.health = p1.maxHealth;
+  p2.health = p2.maxHealth;
+  p1.progress = 0;
+  p2.progress = 0;
+  p1.immuneUntil = 0;
+  p2.immuneUntil = 0;
+  
+  // Clear all UI graphics
+  if (p1.healthGfx) p1.healthGfx.clear();
+  if (p2.healthGfx) p2.healthGfx.clear();
+  if (p1.patternGfx) p1.patternGfx.clear();
+  if (p2.patternGfx) p2.patternGfx.clear();
+  if (p1.scoreGfx) p1.scoreGfx.clear();
+  if (p2.scoreGfx) p2.scoreGfx.clear();
+  if (timerGfx) timerGfx.clear();
+  if (g) g.clear();
+  if (gPlayers) gPlayers.clear();
+  
+  // Hide control instructions
+  sceneRef.children.list.forEach(child => {
+    if (child.name === 'controls') {
+      child.setVisible(false);
+    }
+  });
+  
+  // Show menu
+  showMenu();
 }
 
 function getPlayerColor(player, now) {
