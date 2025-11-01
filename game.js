@@ -528,13 +528,13 @@ function update(_time, delta) {
     currentRound = Math.floor(elapsedSeconds / 10) + 1;
     
     // Base health drain rate increases with each round
-    const baseHealthDrainRate = 30; // health per second
+    const baseHealthDrainRate = 20; // health per second
     const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
     // Players lose health 20% faster when standing still
-    const p1DrainMultiplier = p1IsMoving ? 1.0 : 1.3;
-    const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.3;
+    const p1DrainMultiplier = p1IsMoving ? 1.0 : 1.2;
+    const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.2;
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
     if (gameMode === 'twoPlayer') {
