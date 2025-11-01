@@ -1506,20 +1506,14 @@ function showMenu() {
     fontFamily: 'Arial',
     color: '#888888'
   }).setOrigin(0.5).setDepth(1501);
-  
-  const controls1 = sceneRef.add.text(400, 525, 'W/S or Arrows to select - SPACE/ENTER to start', {
-    fontSize: '14px',
-    fontFamily: 'Arial',
-    color: '#666666'
-  }).setOrigin(0.5).setDepth(1501);
-  
+
   const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + ZXC | P2: Arrows + 123', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#666666'
   }).setOrigin(0.5).setDepth(1501);
   
-  menuUI = { menuBg, title, description, singlePlayerText, twoPlayerText, controlsTitle, controls1, controls2 };
+  menuUI = { menuBg, title, description, singlePlayerText, twoPlayerText, controlsTitle, controls2 };
   updateMenuSelection();
 }
 
@@ -1551,7 +1545,6 @@ function startGame() {
     if (menuUI.singlePlayerText) menuUI.singlePlayerText.destroy();
     if (menuUI.twoPlayerText) menuUI.twoPlayerText.destroy();
     if (menuUI.controlsTitle) menuUI.controlsTitle.destroy();
-    if (menuUI.controls1) menuUI.controls1.destroy();
     if (menuUI.controls2) menuUI.controls2.destroy();
     menuUI = null;
   }
