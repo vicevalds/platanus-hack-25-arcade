@@ -52,7 +52,7 @@ let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
 
 // Test mode: set to true to complete patterns with just the first symbol
-const testMode = true;
+const testMode = false;
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
