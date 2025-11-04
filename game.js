@@ -63,6 +63,12 @@ let menuSelection = 0; // 0 = single player, 1 = two player
 // Test mode: set to true to complete patterns with just the first symbol
 const testMode = true;
 
+// Audio variables
+let audioContext;
+let introMusicLoop = null;
+let gameMusicLoop = null;
+let currentMusic = null;
+
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
   [0,0,1,0,0],
@@ -358,6 +364,155 @@ for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
   }
 }
 
+// ============================================================================
+// AUDIO FUNCTIONS - Web Audio API for procedural sounds
+// ============================================================================
+
+function initAudio() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playTone(freq, duration, type = 'square', volume = 0.15) {
+  if (!audioContext) initAudio();
+  
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioContext.currentTime);
+  
+  gain.gain.setValueAtTime(volume, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+  
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  osc.start(audioContext.currentTime);
+  osc.stop(audioContext.currentTime + duration);
+}
+
+function playErrorSound() {
+  if (!audioContext) initAudio();
+  
+  // Descending "buzz" sound
+  playTone(400, 0.1, 'sawtooth', 0.2);
+  setTimeout(() => playTone(200, 0.15, 'sawtooth', 0.2), 100);
+}
+
+function playSuccessSound() {
+  if (!audioContext) initAudio();
+  
+  // Ascending arpeggio
+  playTone(523, 0.08, 'square', 0.15); // C5
+  setTimeout(() => playTone(659, 0.08, 'square', 0.15), 80); // E5
+  setTimeout(() => playTone(784, 0.15, 'square', 0.15), 160); // G5
+}
+
+function playPowerUpSound() {
+  if (!audioContext) initAudio();
+  
+  // Quick ascending scale
+  playTone(523, 0.06, 'sine', 0.12);
+  setTimeout(() => playTone(659, 0.06, 'sine', 0.12), 60);
+  setTimeout(() => playTone(784, 0.06, 'sine', 0.12), 120);
+  setTimeout(() => playTone(1047, 0.12, 'sine', 0.12), 180);
+}
+
+function playHitSound() {
+  if (!audioContext) initAudio();
+  
+  // Impact sound with noise-like effect
+  playTone(150, 0.08, 'sawtooth', 0.25);
+  setTimeout(() => playTone(100, 0.12, 'sawtooth', 0.2), 50);
+}
+
+function playIntroMusic() {
+  if (!audioContext) initAudio();
+  stopMusic();
+  
+  // Simple intro melody loop (heroic arcade theme)
+  const melody = [
+    { freq: 523, dur: 0.15 }, // C5
+    { freq: 659, dur: 0.15 }, // E5
+    { freq: 784, dur: 0.15 }, // G5
+    { freq: 1047, dur: 0.3 }, // C6
+    { freq: 784, dur: 0.15 }, // G5
+    { freq: 659, dur: 0.15 }, // E5
+    { freq: 523, dur: 0.3 }  // C5
+  ];
+  
+  let time = 0;
+  const loopDuration = melody.reduce((sum, note) => sum + note.dur, 0) * 1000;
+  
+  const playMelody = () => {
+    time = 0;
+    melody.forEach(note => {
+      setTimeout(() => {
+        if (currentMusic === introMusicLoop) {
+          playTone(note.freq, note.dur, 'square', 0.08);
+        }
+      }, time * 1000);
+      time += note.dur;
+    });
+  };
+  
+  playMelody();
+  introMusicLoop = setInterval(playMelody, loopDuration + 200);
+  currentMusic = introMusicLoop;
+}
+
+function playGameMusic() {
+  if (!audioContext) initAudio();
+  stopMusic();
+  
+  // Battle music loop (intense arcade theme)
+  const melody = [
+    { freq: 392, dur: 0.12 }, // G4
+    { freq: 392, dur: 0.12 }, // G4
+    { freq: 440, dur: 0.12 }, // A4
+    { freq: 523, dur: 0.24 }, // C5
+    { freq: 494, dur: 0.12 }, // B4
+    { freq: 440, dur: 0.12 }, // A4
+    { freq: 392, dur: 0.24 }, // G4
+    { freq: 349, dur: 0.12 }, // F4
+    { freq: 392, dur: 0.12 }, // G4
+    { freq: 440, dur: 0.24 }  // A4
+  ];
+  
+  let time = 0;
+  const loopDuration = melody.reduce((sum, note) => sum + note.dur, 0) * 1000;
+  
+  const playMelody = () => {
+    time = 0;
+    melody.forEach(note => {
+      setTimeout(() => {
+        if (currentMusic === gameMusicLoop) {
+          playTone(note.freq, note.dur, 'square', 0.06);
+        }
+      }, time * 1000);
+      time += note.dur;
+    });
+  };
+  
+  playMelody();
+  gameMusicLoop = setInterval(playMelody, loopDuration + 100);
+  currentMusic = gameMusicLoop;
+}
+
+function stopMusic() {
+  if (introMusicLoop) {
+    clearInterval(introMusicLoop);
+    introMusicLoop = null;
+  }
+  if (gameMusicLoop) {
+    clearInterval(gameMusicLoop);
+    gameMusicLoop = null;
+  }
+  currentMusic = null;
+}
+
 function create() {
   sceneRef = this; // store scene reference
   g = this.add.graphics();
@@ -398,6 +553,9 @@ function create() {
   // Pattern & score UI
   initPlayerUI(this, p1, 'L');
   initPlayerUI(this, p2, 'R');
+
+  // Initialize audio context
+  initAudio();
 
   // Show menu
   showMenu();
@@ -1113,6 +1271,7 @@ function initPlayerUI(scene, player, side) {
   player.health = player.maxHealth;
   player.hasShield = false; // Shield from buk pickup
   player.wildcardDirections = []; // Directions pressed for wildcard patterns
+  player.errorFlashUntil = 0; // Error flash timestamp
   player.healthGfx = scene.add.graphics();
   player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
@@ -1225,6 +1384,8 @@ function tryStep(player, input) {
     
     if (player.progress >= player.pattern.length) {
       player.score++;
+      // Play success sound
+      playSuccessSound();
       // Recover 50% of max health when completing pattern (capped at max health)
       player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.5);
       const completed = player.pattern.slice();
@@ -1237,6 +1398,10 @@ function tryStep(player, input) {
       player.wildcardDirections = []; // Reset wildcard directions
     }
   } else {
+    // Play error sound on mistake
+    playErrorSound();
+    // Set error flash timestamp (flash for 400ms)
+    player.errorFlashUntil = sceneRef.time.now + 400;
     player.progress = 0;
     player.wildcardDirections = []; // Reset on mistake
   }
@@ -1335,6 +1500,11 @@ function drawPatternUI(player) {
   for (let i = 0; i < buttons.length; i++) totalW += (i === idx ? aw2 : aw);
   totalW += (buttons.length - 1) * gap;
   
+  // Check if there's an active error flash
+  const now = sceneRef ? sceneRef.time.now : 0;
+  const isErrorFlashing = player.errorFlashUntil && now < player.errorFlashUntil;
+  const flashOn = isErrorFlashing && (Math.floor(now / 50) % 2 === 0); // Flash every 50ms
+  
   // Draw black background for pattern
   const bgPadding = 6;
   const bgHeight = iconH * basePs * 2 + bgPadding * 2; // accommodate 2x size
@@ -1358,8 +1528,14 @@ function drawPatternUI(player) {
     let color;
     if (i < idx) color = 0x777777; // passed -> gray
     else if (isCurrent) {
-      // Current symbol: green for all (including wildcard)
-      color = 0x00ff66; // Green for current symbol
+      // Current symbol: check for error flash
+      if (isErrorFlashing) {
+        // Flash between red and dark red
+        color = flashOn ? 0xff0000 : 0x880000; // Bright red / Dark red
+      } else {
+        // Normal: green for current symbol
+        color = 0x00ff66;
+      }
     } else {
       // Upcoming: white for all symbols
       color = 0xffffff; // White for all upcoming symbols
@@ -1616,6 +1792,9 @@ function onPlayerHit(player, now, dmg = 1) {
     return; // Shield absorbed the hit
   }
   
+  // Play hit sound
+  playHitSound();
+  
   // Progressive damage multiplier: increases by 0.1x per round
   // Round 1: 1.0x, Round 2: 1.1x, Round 3: 1.2x, etc.
   const roundMultiplier = 1.0 + (currentRound - 1) * 0.1;
@@ -1644,6 +1823,9 @@ function onPlayerHit(player, now, dmg = 1) {
 function endGame(winner, loser) {
   if (gameState === 'gameOver' || !sceneRef) return; // already ended or no scene
   gameState = 'gameOver';
+  
+  // Stop music when game ends
+  stopMusic();
   
   // Semi-transparent overlay
   const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
@@ -1797,6 +1979,9 @@ function showMenu() {
   
   menuUI = { menuBg, title, description, singlePlayerText, twoPlayerText, controlsTitle, controls2 };
   updateMenuSelection();
+  
+  // Start intro music
+  playIntroMusic();
 }
 
 function updateMenuSelection() {
@@ -1818,6 +2003,9 @@ function updateMenuSelection() {
 
 function startGame() {
   if (!sceneRef || gameState !== 'menu') return;
+  
+  // Start game music
+  playGameMusic();
   
   // Hide menu
   if (menuUI) {
@@ -1859,6 +2047,8 @@ function startGame() {
   p2.immuneUntil = 0;
   p1.wildcardDirections = [];
   p2.wildcardDirections = [];
+  p1.errorFlashUntil = 0;
+  p2.errorFlashUntil = 0;
   
   // Reset power-up system
   activePowerUpType = null;
@@ -1959,6 +2149,8 @@ function restartGame() {
   p2.immuneUntil = 0;
   p1.wildcardDirections = [];
   p2.wildcardDirections = [];
+  p1.errorFlashUntil = 0;
+  p2.errorFlashUntil = 0;
   
   // Reset power-up system
   activePowerUpType = null;
@@ -2082,6 +2274,8 @@ function returnToMenu() {
   p2.hasShield = false;
   p1.wildcardDirections = [];
   p2.wildcardDirections = [];
+  p1.errorFlashUntil = 0;
+  p2.errorFlashUntil = 0;
   
   // Clear all UI graphics
   if (p1.healthGfx) p1.healthGfx.clear();
@@ -2101,7 +2295,7 @@ function returnToMenu() {
     }
   });
   
-  // Show menu
+  // Show menu (will start intro music)
   showMenu();
 }
 
@@ -2209,6 +2403,7 @@ function updateShieldP1(now) {
 
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
+      playPowerUpSound();
       p1.health = p1.maxHealth; // Fill health to 100%
       drawHealthBar(p1);
       shieldP1 = null;
@@ -2301,6 +2496,7 @@ function updateShieldP2(now) {
 
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
+      playPowerUpSound();
       p2.health = p2.maxHealth; // Fill health to 100%
       drawHealthBar(p2);
       shieldP2 = null;
@@ -2351,6 +2547,7 @@ function updateBukP1(now) {
 
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, bukP1.x, bukP1.y) <= (p1.size + 10) * (p1.size + 10)) {
+      playPowerUpSound();
       p1.hasShield = true;
       bukP1 = null;
       // Reset timer based on game mode
@@ -2400,6 +2597,7 @@ function updateBukP2(now) {
 
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, bukP2.x, bukP2.y) <= (p2.size + 10) * (p2.size + 10)) {
+      playPowerUpSound();
       p2.hasShield = true;
       bukP2 = null;
       nextPowerUpP2At = now + (5000 + Math.random() * 3000);
@@ -2494,6 +2692,7 @@ function updateAwsP1(now) {
 
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, awsP1.x, awsP1.y) <= (p1.size + 10) * (p1.size + 10)) {
+      playPowerUpSound();
       // Create wall at AWS position (same size as player for visual consistency)
       const wallX = awsP1.x;
       const wallY = awsP1.y;
@@ -2553,6 +2752,7 @@ function updateAwsP2(now) {
 
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, awsP2.x, awsP2.y) <= (p2.size + 10) * (p2.size + 10)) {
+      playPowerUpSound();
       // Create wall at AWS position (same size as player for visual consistency)
       const wallX = awsP2.x;
       const wallY = awsP2.y;
