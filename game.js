@@ -39,6 +39,11 @@ let bukP1 = null; // buk shield for P1
 let bukP2 = null; // buk shield for P2
 let nextBukP1At = 0; // ms timestamp for P1 buk
 let nextBukP2At = 0; // ms timestamp for P2 buk
+let awsP1 = null; // AWS wall power-up for P1
+let awsP2 = null; // AWS wall power-up for P2
+let nextAwsP1At = 0; // ms timestamp for P1 AWS
+let nextAwsP2At = 0; // ms timestamp for P2 AWS
+let walls = []; // active walls (each wall has x, y, width, height, hits)
 let timerGfx; // pixel timer display
 let stars = []; // background stars
 let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
@@ -153,6 +158,25 @@ const BUK_LOGO = [
   [1,1,0,1,1,0,0,1,0,1,0,1,1,0,0,1,1],
   [1,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1],
   [0,0,0,1,1,0,0,1,1,1,0,1,0,1,0,0,0]
+];
+
+const AWS_LOGO = [
+  [0,0,1,0,1,0,0,0,0,0,0,0,1,0,1,1,1],
+  [0,1,1,1,0,1,0,0,1,0,0,1,0,0,1,0,0],
+  [0,1,0,1,0,0,1,0,1,0,1,0,0,0,1,1,1],
+  [1,1,1,1,1,0,1,0,1,0,1,0,0,0,0,0,1],
+  [1,1,0,1,1,0,0,1,0,1,0,0,0,0,1,1,1]
+];
+
+// Wall mask (3 columns x 7 rows) - vertical bar with pattern
+const WALL_MASK = [
+  [1,1,1],
+  [1,0,1],
+  [1,1,1],
+  [1,0,1],
+  [1,1,1],
+  [1,0,1],
+  [1,1,1]
 ];
 
 // Pixel digit masks (3x5)
@@ -584,6 +608,8 @@ function update(_time, delta) {
   if (gameState === 'playing' && arcadeButtons['P1D']) vy1 += 1;
   if (vx1 !== 0 && vy1 !== 0) { const s = Math.SQRT1_2; vx1 *= s; vy1 *= s; }
   const p1IsMoving = vx1 !== 0 || vy1 !== 0;
+  const prevP1X = p1.x;
+  const prevP1Y = p1.y;
   p1.x += vx1 * speed * dt;
   p1.y += vy1 * speed * dt;
 
@@ -595,6 +621,8 @@ function update(_time, delta) {
   if (gameState === 'playing' && arcadeButtons['P2D']) vy2 += 1;
   if (vx2 !== 0 && vy2 !== 0) { const s = Math.SQRT1_2; vx2 *= s; vy2 *= s; }
   const p2IsMoving = vx2 !== 0 || vy2 !== 0;
+  const prevP2X = p2.x;
+  const prevP2Y = p2.y;
   p2.x += vx2 * speed * dt;
   p2.y += vy2 * speed * dt;
 
@@ -649,6 +677,8 @@ function update(_time, delta) {
     p2.y = Phaser.Math.Clamp(p2.y, TOP_UI_HEIGHT + m2, 600 - m2);
   }
 
+  // Players can now pass through walls (no collision check)
+
   // Draw
   g.clear();
   gPlayers.clear();
@@ -681,6 +711,15 @@ function update(_time, delta) {
   if (gameMode === 'twoPlayer') {
     updateBukP2(_time);
   }
+
+  // AWS power-ups (on arena layer) - one per player
+  updateAwsP1(_time);
+  if (gameMode === 'twoPlayer') {
+    updateAwsP2(_time);
+  }
+
+  // Draw walls
+  drawWalls();
 
   // timer
   drawTimer(_time);
@@ -1444,6 +1483,37 @@ function updateProjectiles(dt, now) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       drawProjectile(p);
+      
+      // Check collision with walls
+      let hitWall = false;
+      for (let w = 0; w < walls.length; w++) {
+        const wall = walls[w];
+        // Calculate wall dimensions from mask
+        const cols = WALL_MASK[0].length; // 3
+        const rows = WALL_MASK.length; // 7
+        const ps = Math.max(2, Math.floor((wall.size * 2) / cols));
+        const wallWidth = cols * ps;
+        const wallHeight = rows * ps;
+        const hw = wallWidth / 2;
+        const hh = wallHeight / 2;
+        
+        // Check if projectile is inside wall boundaries
+        if (p.x >= wall.x - hw && p.x <= wall.x + hw && 
+            p.y >= wall.y - hh && p.y <= wall.y + hh) {
+          wall.hits++;
+          if (wall.hits >= 2) {
+            // Remove wall after 2 hits
+            walls.splice(w, 1);
+          }
+          hitWall = true;
+          break;
+        }
+      }
+      if (hitWall) {
+        arr.splice(i, 1);
+        continue;
+      }
+      
       // collision with target player
       const target = side === 'L' ? p1 : p2;
       if (isHit(p, target)) {
@@ -1763,6 +1833,11 @@ function startGame() {
   bukP2 = null;
   nextBukP1At = 0;
   nextBukP2At = 0;
+  awsP1 = null;
+  awsP2 = null;
+  nextAwsP1At = 0;
+  nextAwsP2At = 0;
+  walls = [];
   p1.hasShield = false;
   p2.hasShield = false;
   
@@ -1832,6 +1907,11 @@ function restartGame() {
   bukP2 = null;
   nextBukP1At = 0;
   nextBukP2At = 0;
+  awsP1 = null;
+  awsP2 = null;
+  nextAwsP1At = 0;
+  nextAwsP2At = 0;
+  walls = [];
   p1.hasShield = false;
   p2.hasShield = false;
   
@@ -1902,6 +1982,11 @@ function returnToMenu() {
   bukP2 = null;
   nextBukP1At = 0;
   nextBukP2At = 0;
+  awsP1 = null;
+  awsP2 = null;
+  nextAwsP1At = 0;
+  nextAwsP2At = 0;
+  walls = [];
   
   // Reset player positions off screen
   p1.x = 200;
@@ -2148,27 +2233,27 @@ function updateBukP2(now) {
   }
 }
 
-function spawnShieldP1() {
+function spawnShieldP1(now) {
   const margin = 20;
   const halfX = 400;
   // Spawn in P1's half (left side)
   const x = margin + Math.random() * (halfX - margin * 2);
   // Spawn shield only in playable area (below top UI section)
   const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  shieldP1 = { x, y, ps: 5 };
+  shieldP1 = { x, y, ps: 5, spawnTime: now };
 }
 
-function spawnShieldP2() {
+function spawnShieldP2(now) {
   const margin = 20;
   const halfX = 400;
   // Spawn in P2's half (right side)
   const x = halfX + margin + Math.random() * (halfX - margin * 2);
   // Spawn shield only in playable area (below top UI section)
   const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  shieldP2 = { x, y, ps: 5 };
+  shieldP2 = { x, y, ps: 5, spawnTime: now };
 }
 
-function spawnBukP1() {
+function spawnBukP1(now) {
   const margin = 20;
   const halfX = 400;
   // In single player mode, spawn across full screen; otherwise in P1's half
@@ -2180,17 +2265,164 @@ function spawnBukP1() {
   }
   // Spawn buk only in playable area (below top UI section)
   y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  bukP1 = { x, y, ps: 4 }; // ps: 4 for double size
+  bukP1 = { x, y, ps: 4, spawnTime: now }; // ps: 4 for double size
 }
 
-function spawnBukP2() {
+function spawnBukP2(now) {
   const margin = 20;
   const halfX = 400;
   // Spawn in P2's half (right side)
   const x = halfX + margin + Math.random() * (halfX - margin * 2);
   // Spawn buk only in playable area (below top UI section)
   const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  bukP2 = { x, y, ps: 4 }; // ps: 4 for double size
+  bukP2 = { x, y, ps: 4, spawnTime: now }; // ps: 4 for double size
+}
+
+function updateAwsP1(now) {
+  // schedule spawn if none
+  if (!awsP1) {
+    if (nextAwsP1At === 0) {
+      // set an initial delay so it doesn't appear immediately
+      nextAwsP1At = now + (10000 + Math.random() * 5000); // 10-15s initial spawn (longer than buk)
+    } else if (now >= nextAwsP1At) {
+      spawnAwsP1();
+    }
+  }
+  // draw and check pickup
+  if (awsP1) {
+    // Draw shadow for AWS first
+    drawShadow(g, awsP1.x, awsP1.y, 15);
+    
+    const ps = awsP1.ps;
+    const w = AWS_LOGO[0].length * ps;
+    const h = AWS_LOGO.length * ps;
+    const sx = Math.floor(awsP1.x - w / 2);
+    const sy = Math.floor(awsP1.y - h / 2);
+    
+    // Draw AWS logo in orange
+    g.fillStyle(0xFF9900, 1);
+    for (let r = 0; r < AWS_LOGO.length; r++) {
+      for (let c = 0; c < AWS_LOGO[r].length; c++) {
+        if (AWS_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+
+    // pickup check for P1 only
+    if (distSq(p1.x, p1.y, awsP1.x, awsP1.y) <= (p1.size + 10) * (p1.size + 10)) {
+      // Create wall at AWS position (same size as player for visual consistency)
+      const wallX = awsP1.x;
+      const wallY = awsP1.y;
+      
+      walls.push({ 
+        x: wallX, 
+        y: wallY, 
+        size: p1.size, // Use player size for scaling
+        hits: 0 
+      });
+      
+      awsP1 = null; 
+      nextAwsP1At = now + (10000 + Math.random() * 5000); // respawn in 10-15s
+    }
+  }
+}
+
+function updateAwsP2(now) {
+  // schedule spawn if none
+  if (!awsP2) {
+    if (nextAwsP2At === 0) {
+      // set an initial delay so it doesn't appear immediately
+      nextAwsP2At = now + (10000 + Math.random() * 5000); // 10-15s initial spawn (longer than buk)
+    } else if (now >= nextAwsP2At) {
+      spawnAwsP2();
+    }
+  }
+  // draw and check pickup
+  if (awsP2) {
+    // Draw shadow for AWS first
+    drawShadow(g, awsP2.x, awsP2.y, 15);
+    
+    const ps = awsP2.ps;
+    const w = AWS_LOGO[0].length * ps;
+    const h = AWS_LOGO.length * ps;
+    const sx = Math.floor(awsP2.x - w / 2);
+    const sy = Math.floor(awsP2.y - h / 2);
+    
+    // Draw AWS logo in orange
+    g.fillStyle(0xFF9900, 1);
+    for (let r = 0; r < AWS_LOGO.length; r++) {
+      for (let c = 0; c < AWS_LOGO[r].length; c++) {
+        if (AWS_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+      }
+    }
+
+    // pickup check for P2 only
+    if (distSq(p2.x, p2.y, awsP2.x, awsP2.y) <= (p2.size + 10) * (p2.size + 10)) {
+      // Create wall at AWS position (same size as player for visual consistency)
+      const wallX = awsP2.x;
+      const wallY = awsP2.y;
+      
+      walls.push({ 
+        x: wallX, 
+        y: wallY, 
+        size: p2.size, // Use player size for scaling
+        hits: 0 
+      });
+      
+      awsP2 = null;
+      nextAwsP2At = now + (10000 + Math.random() * 5000); // respawn in 10-15s
+    }
+  }
+}
+
+function spawnAwsP1() {
+  const margin = 20;
+  const halfX = 400;
+  // In single player mode, spawn across full screen; otherwise in P1's half
+  let x, y;
+  if (gameMode === 'singlePlayer') {
+    x = margin + Math.random() * (800 - margin * 2);
+  } else {
+    x = margin + Math.random() * (halfX - margin * 2);
+  }
+  // Spawn AWS only in playable area (below top UI section)
+  y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
+  awsP1 = { x, y, ps: 3 }; // ps: 3 for smaller size
+}
+
+function spawnAwsP2() {
+  const margin = 20;
+  const halfX = 400;
+  // Spawn in P2's half (right side)
+  const x = halfX + margin + Math.random() * (halfX - margin * 2);
+  // Spawn AWS only in playable area (below top UI section)
+  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
+  awsP2 = { x, y, ps: 3 }; // ps: 3 for smaller size
+}
+
+function drawWalls() {
+  // Draw all active walls using pixel mask (3x7 pixels, scaled like player)
+  for (let i = 0; i < walls.length; i++) {
+    const wall = walls[i];
+    const cols = WALL_MASK[0].length; // 3
+    const rows = WALL_MASK.length; // 7
+    
+    // Scale to fit wall size (similar to player scaling)
+    const ps = Math.max(2, Math.floor((wall.size * 2) / cols));
+    const w = cols * ps;
+    const h = rows * ps;
+    const sx = Math.floor(wall.x - w / 2);
+    const sy = Math.floor(wall.y - h / 2);
+    
+    // Draw wall using mask with AWS orange color
+    g.fillStyle(0xFF9900, 1);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (WALL_MASK[r][c]) {
+          g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+        }
+      }
+    }
+  }
 }
 
 function grantImmunity(player, ms, now) {
