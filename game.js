@@ -49,6 +49,9 @@ let stars = []; // background stars
 let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
 let activePowerUpType = null; // Current active power-up type: 'shield', 'buk', 'aws', or null
 let nextPowerUpSpawnAt = 0; // Global power-up spawn timer
+// Independent timers for two player mode
+let nextPowerUpP1At = 0; // P1's independent spawn timer
+let nextPowerUpP2At = 0; // P2's independent spawn timer
 let gameOverText = null; // game over message text
 let sceneRef = null; // reference to the scene
 let menuUI = null; // menu UI elements
@@ -1859,7 +1862,10 @@ function startGame() {
   
   // Reset power-up system
   activePowerUpType = null;
-  nextPowerUpSpawnAt = sceneRef.time.now + (5000 + Math.random() * 3000); // First spawn in 5-8s
+  nextPowerUpSpawnAt = sceneRef.time.now + (5000 + Math.random() * 3000); // First spawn in 5-8s for single player
+  // Initialize independent timers for two player mode
+  nextPowerUpP1At = sceneRef.time.now + (5000 + Math.random() * 3000);
+  nextPowerUpP2At = sceneRef.time.now + (5000 + Math.random() * 3000);
   
   // Position players based on mode
   if (gameMode === 'singlePlayer') {
@@ -1956,7 +1962,10 @@ function restartGame() {
   
   // Reset power-up system
   activePowerUpType = null;
-  nextPowerUpSpawnAt = sceneRef.time.now + (5000 + Math.random() * 3000); // First spawn in 5-8s
+  nextPowerUpSpawnAt = sceneRef.time.now + (5000 + Math.random() * 3000); // First spawn in 5-8s for single player
+  // Initialize independent timers for two player mode
+  nextPowerUpP1At = sceneRef.time.now + (5000 + Math.random() * 3000);
+  nextPowerUpP2At = sceneRef.time.now + (5000 + Math.random() * 3000);
   projL = [];
   projR = [];
   shieldP1 = null;
@@ -2051,6 +2060,8 @@ function returnToMenu() {
   // Reset power-up system
   activePowerUpType = null;
   nextPowerUpSpawnAt = 0;
+  nextPowerUpP1At = 0;
+  nextPowerUpP2At = 0;
   
   // Reset player positions off screen
   p1.x = 200;
@@ -2102,24 +2113,36 @@ function getPlayerColor(player, now) {
 }
 
 function updateShieldP1(now) {
-  // Count active power-ups
-  const activePowerUps = [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
+  // Count active power-ups for P1 only in two player mode
+  const activePowerUpsP1 = (gameMode === 'twoPlayer') ? 
+    [shieldP1, bukP1, awsP1].filter(p => p !== null).length :
+    [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
+  
+  // Use independent timer for two player mode, global for single player
+  const spawnTimer = (gameMode === 'twoPlayer') ? nextPowerUpP1At : nextPowerUpSpawnAt;
   
   // schedule spawn if none
-  if (!shieldP1) {
-    // Only spawn if we can (less than 2 power-ups and it's shield's turn)
-    if (activePowerUps < 2 && activePowerUpType === 'shield') {
-      if (now >= nextPowerUpSpawnAt) {
+  if (!shieldP1 && !bukP1 && !awsP1) {
+    // In two player mode, choose random power-up independently for P1
+    if (gameMode === 'twoPlayer' && now >= spawnTimer) {
+      const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
+      if (randomType === 'shield') {
         spawnShieldP1(now);
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+      } else if (randomType === 'buk') {
+        spawnBukP1(now);
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else if (randomType === 'aws') {
+        spawnAwsP1(now);
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
       }
-    } else if (activePowerUps < 2 && activePowerUpType === null) {
-      // Choose random power-up type when none is active
-      if (now >= nextPowerUpSpawnAt) {
-        const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-        if (randomType === 'shield') {
-          spawnShieldP1(now);
-          activePowerUpType = 'shield';
-        }
+    } else if (gameMode === 'singlePlayer' && activePowerUpsP1 < 2 && now >= spawnTimer) {
+      // Single player mode: use global system
+      const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
+      if (randomType === 'shield') {
+        spawnShieldP1(now);
+        activePowerUpType = 'shield';
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
     }
   }
@@ -2130,9 +2153,12 @@ function updateShieldP1(now) {
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       shieldP1 = null;
-      if (activePowerUps <= 1) {
+      // Reset timer based on game mode
+      if (gameMode === 'twoPlayer') {
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else if (activePowerUpsP1 <= 1) {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
       return;
     }
@@ -2186,33 +2212,35 @@ function updateShieldP1(now) {
       p1.health = p1.maxHealth; // Fill health to 100%
       drawHealthBar(p1);
       shieldP1 = null;
-      if (activePowerUps <= 1) {
+      // Reset timer based on game mode
+      if (gameMode === 'twoPlayer') {
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else if (activePowerUpsP1 <= 1) {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
     }
   }
 }
 
 function updateShieldP2(now) {
-  // Count active power-ups
-  const activePowerUps = [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
+  // Count active power-ups for P2 only
+  const activePowerUpsP2 = [shieldP2, bukP2, awsP2].filter(p => p !== null).length;
   
-  // schedule spawn if none
-  if (!shieldP2) {
-    // Only spawn if we can (less than 2 power-ups and it's shield's turn)
-    if (activePowerUps < 2 && activePowerUpType === 'shield') {
-      if (now >= nextPowerUpSpawnAt && gameMode === 'twoPlayer') {
+  // schedule spawn if none - only in two player mode
+  if (!shieldP2 && !bukP2 && !awsP2 && gameMode === 'twoPlayer') {
+    // Choose random power-up independently for P2
+    if (now >= nextPowerUpP2At) {
+      const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
+      if (randomType === 'shield') {
         spawnShieldP2(now);
-      }
-    } else if (activePowerUps < 2 && activePowerUpType === null) {
-      // Choose random power-up type when none is active
-      if (now >= nextPowerUpSpawnAt && gameMode === 'twoPlayer') {
-        const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-        if (randomType === 'shield') {
-          spawnShieldP2(now);
-          activePowerUpType = 'shield';
-        }
+        nextPowerUpP2At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+      } else if (randomType === 'buk') {
+        spawnBukP2(now);
+        nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      } else if (randomType === 'aws') {
+        spawnAwsP2(now);
+        nextPowerUpP2At = now + (5000 + Math.random() * 3000);
       }
     }
   }
@@ -2223,10 +2251,7 @@ function updateShieldP2(now) {
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       shieldP2 = null;
-      if (activePowerUps <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
-      }
+      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
       return;
     }
 
@@ -2279,46 +2304,25 @@ function updateShieldP2(now) {
       p2.health = p2.maxHealth; // Fill health to 100%
       drawHealthBar(p2);
       shieldP2 = null;
-      if (activePowerUps <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
-      }
+      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
     }
   }
 }
 
 function updateBukP1(now) {
-  // Count active power-ups
-  const activePowerUps = [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
-  
-  // schedule spawn if none
-  if (!bukP1) {
-    // Only spawn if we can (less than 2 power-ups and it's buk's turn)
-    if (activePowerUps < 2 && activePowerUpType === 'buk') {
-      if (now >= nextPowerUpSpawnAt) {
-        spawnBukP1(now);
-      }
-    } else if (activePowerUps < 2 && activePowerUpType === null) {
-      // Choose random power-up type when none is active
-      if (now >= nextPowerUpSpawnAt) {
-        const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-        if (randomType === 'buk') {
-          spawnBukP1(now);
-          activePowerUpType = 'buk';
-        }
-      }
-    }
-  }
-  // draw and check pickup
+  // Draw and check pickup (spawn is handled in updateShieldP1)
   if (bukP1) {
     const timeAlive = now - bukP1.spawnTime;
     
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       bukP1 = null;
-      if (activePowerUps <= 1) {
+      // Reset timer based on game mode
+      if (gameMode === 'twoPlayer') {
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
       return;
     }
@@ -2349,47 +2353,26 @@ function updateBukP1(now) {
     if (distSq(p1.x, p1.y, bukP1.x, bukP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       p1.hasShield = true;
       bukP1 = null;
-      if (activePowerUps <= 1) {
+      // Reset timer based on game mode
+      if (gameMode === 'twoPlayer') {
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
     }
   }
 }
 
 function updateBukP2(now) {
-  // Count active power-ups
-  const activePowerUps = [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
-  
-  // schedule spawn if none
-  if (!bukP2) {
-    // Only spawn if we can (less than 2 power-ups and it's buk's turn)
-    if (activePowerUps < 2 && activePowerUpType === 'buk') {
-      if (now >= nextPowerUpSpawnAt && gameMode === 'twoPlayer') {
-        spawnBukP2(now);
-      }
-    } else if (activePowerUps < 2 && activePowerUpType === null) {
-      // Choose random power-up type when none is active
-      if (now >= nextPowerUpSpawnAt && gameMode === 'twoPlayer') {
-        const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-        if (randomType === 'buk') {
-          spawnBukP2(now);
-          activePowerUpType = 'buk';
-        }
-      }
-    }
-  }
-  // draw and check pickup
+  // Draw and check pickup (spawn is handled in updateShieldP2)
   if (bukP2) {
     const timeAlive = now - bukP2.spawnTime;
     
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       bukP2 = null;
-      if (activePowerUps <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
-      }
+      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
       return;
     }
 
@@ -2419,10 +2402,7 @@ function updateBukP2(now) {
     if (distSq(p2.x, p2.y, bukP2.x, bukP2.y) <= (p2.size + 10) * (p2.size + 10)) {
       p2.hasShield = true;
       bukP2 = null;
-      if (activePowerUps <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
-      }
+      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
     }
   }
 }
@@ -2473,37 +2453,19 @@ function spawnBukP2(now) {
 }
 
 function updateAwsP1(now) {
-  // Count active power-ups
-  const activePowerUps = [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
-  
-  // schedule spawn if none
-  if (!awsP1) {
-    // Only spawn if we can (less than 2 power-ups and it's aws's turn)
-    if (activePowerUps < 2 && activePowerUpType === 'aws') {
-      if (now >= nextPowerUpSpawnAt) {
-        spawnAwsP1(now);
-      }
-    } else if (activePowerUps < 2 && activePowerUpType === null) {
-      // Choose random power-up type when none is active
-      if (now >= nextPowerUpSpawnAt) {
-        const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-        if (randomType === 'aws') {
-          spawnAwsP1(now);
-          activePowerUpType = 'aws';
-        }
-      }
-    }
-  }
-  // draw and check pickup
+  // Draw and check pickup (spawn is handled in updateShieldP1)
   if (awsP1) {
     const timeAlive = now - awsP1.spawnTime;
     
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       awsP1 = null;
-      if (activePowerUps <= 1) {
+      // Reset timer based on game mode
+      if (gameMode === 'twoPlayer') {
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
       return;
     }
@@ -2544,47 +2506,26 @@ function updateAwsP1(now) {
       });
       
       awsP1 = null;
-      if (activePowerUps <= 1) {
+      // Reset timer based on game mode
+      if (gameMode === 'twoPlayer') {
+        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+      } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
     }
   }
 }
 
 function updateAwsP2(now) {
-  // Count active power-ups
-  const activePowerUps = [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
-  
-  // schedule spawn if none
-  if (!awsP2) {
-    // Only spawn if we can (less than 2 power-ups and it's aws's turn)
-    if (activePowerUps < 2 && activePowerUpType === 'aws') {
-      if (now >= nextPowerUpSpawnAt && gameMode === 'twoPlayer') {
-        spawnAwsP2(now);
-      }
-    } else if (activePowerUps < 2 && activePowerUpType === null) {
-      // Choose random power-up type when none is active
-      if (now >= nextPowerUpSpawnAt && gameMode === 'twoPlayer') {
-        const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-        if (randomType === 'aws') {
-          spawnAwsP2(now);
-          activePowerUpType = 'aws';
-        }
-      }
-    }
-  }
-  // draw and check pickup
+  // Draw and check pickup (spawn is handled in updateShieldP2)
   if (awsP2) {
     const timeAlive = now - awsP2.spawnTime;
     
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       awsP2 = null;
-      if (activePowerUps <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
-      }
+      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
       return;
     }
 
@@ -2624,10 +2565,7 @@ function updateAwsP2(now) {
       });
       
       awsP2 = null;
-      if (activePowerUps <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000); // respawn in 5-8s
-      }
+      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
     }
   }
 }
