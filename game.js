@@ -21,13 +21,13 @@ let arcadeButtons = {}; // tracks arcade button states (e.g., 'P1U': true/false)
 let speed = 440; // px/s (doubled for faster movement)
 const TOP_UI_HEIGHT = 150; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
-const ARCADE_BUTTONS = ['A', 'B', 'C']; // Top 3 arcade buttons
-// Button to direction mapping (for attacks)
-// A = Left, B = Up or Down (random), C = Right
+// Button to direction mapping for patterns
+// Players press arcade buttons that map to directions
 const BUTTON_TO_DIR = {
-  'A': 'L',  // Left button = Left
-  'C': 'R'   // Right button = Right
-  // B is handled specially to randomly pick Up or Down
+  'B': 'U',  // Button B = Up
+  'X': 'L',  // Button X = Left
+  'Y': 'D',  // Button Y = Down
+  'Z': 'R'   // Button Z = Right
 };
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
@@ -80,29 +80,6 @@ const ARROW_L = [
   [0,1,0,0,0],
   [1,1,1,1,1],
   [0,1,0,0,0],
-  [0,0,1,0,0]
-];
-
-// Pixel button masks (5x5) for arcade buttons
-const BUTTON_A = [
-  [0,0,1,0,0],
-  [0,1,0,0,0],
-  [1,1,1,1,1],
-  [0,1,0,0,0],
-  [0,0,1,0,0]
-];
-const BUTTON_B = [
-  [0,0,1,0,0],
-  [0,1,1,1,0],
-  [1,0,1,0,1],
-  [0,0,1,0,0],
-  [0,0,1,0,0]
-];
-const BUTTON_C = [
-  [0,0,1,0,0],
-  [0,0,0,1,0],
-  [1,1,1,1,1],
-  [0,0,0,1,0],
   [0,0,1,0,0]
 ];
 
@@ -280,10 +257,11 @@ const DIGITS = {
 //
 // CURRENT GAME USAGE (Two Players - Split Arena):
 //   - P1U/P1D/P1L/P1R (Joystick) → P1 Movement
-//   - P1A/P1B/P1C (Action Buttons) → P1 Pattern Input
+//   - P1B/P1X/P1Y/P1Z (Buttons: Up/Left/Down/Right) → P1 Pattern Directions
 //   - P2U/P2D/P2L/P2R (Joystick) → P2 Movement
-//   - P2A/P2B/P2C (Action Buttons) → P2 Pattern Input
+//   - P2B/P2X/P2Y/P2Z (Buttons: Up/Left/Down/Right) → P2 Pattern Directions
 //   - START1/START2 → Menu Navigation & Game Start
+//   - Note: Buttons A and C are not used
 // =============================================================================
 
 const ARCADE_CONTROLS = {
@@ -367,13 +345,13 @@ function create() {
   });
 
   // Control instructions (hidden until game starts)
-  const p1Controls = this.add.text(100, 580, 'P1: WASD + UIO', {
+  const p1Controls = this.add.text(100, 580, 'P1: WASD + IJKL', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#8899ff'
   }).setOrigin(0.5).setVisible(false).setName('controls');
   
-  const p2Controls = this.add.text(700, 580, 'P2: Arrows + RTY', {
+  const p2Controls = this.add.text(700, 580, 'P2: Arrows + TFGH', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#ffdd00'
@@ -428,13 +406,15 @@ function create() {
     
     if (gameState !== 'playing') return;
     
-    // Pattern step handling with arcade buttons
-    if (arcadeCode === 'P1A') tryStep(p1, 'A');
-    else if (arcadeCode === 'P1B') tryStep(p1, 'B');
-    else if (arcadeCode === 'P1C') tryStep(p1, 'C');
-    else if (arcadeCode === 'P2A') tryStep(p2, 'A');
-    else if (arcadeCode === 'P2B') tryStep(p2, 'B');
-    else if (arcadeCode === 'P2C') tryStep(p2, 'C');
+    // Pattern step handling with arcade buttons (B=Up, X=Left, Y=Down, Z=Right)
+    if (arcadeCode === 'P1B') tryStep(p1, 'B');  // Up
+    else if (arcadeCode === 'P1X') tryStep(p1, 'X');  // Left
+    else if (arcadeCode === 'P1Y') tryStep(p1, 'Y');  // Down
+    else if (arcadeCode === 'P1Z') tryStep(p1, 'Z');  // Right
+    else if (arcadeCode === 'P2B') tryStep(p2, 'B');  // Up
+    else if (arcadeCode === 'P2X') tryStep(p2, 'X');  // Left
+    else if (arcadeCode === 'P2Y') tryStep(p2, 'Y');  // Down
+    else if (arcadeCode === 'P2Z') tryStep(p2, 'Z');  // Right
   });
   
   this.input.keyboard.on('keyup', (ev) => {
@@ -1134,8 +1114,8 @@ function makePattern() {
   
   const arr = [];
   for (let i = 0; i < len; i++) {
-    // Only use top 3 arcade buttons (A, B, C)
-    arr.push(ARCADE_BUTTONS[(Math.random() * 3) | 0]);
+    // Use all 4 directions (U, D, L, R)
+    arr.push(DIRS[(Math.random() * 4) | 0]);
   }
   return arr;
 }
@@ -1159,9 +1139,11 @@ function tryStep(player, input) {
   
   const want = player.pattern[player.progress];
   
-  // Patterns only contain arcade buttons A, B, C
-  // Check if input matches the expected button
-  const matches = (input === want);
+  // Convert button to direction (B=U, X=L, Y=D, Z=R)
+  const direction = BUTTON_TO_DIR[input];
+  
+  // Check if the direction matches the expected pattern direction
+  const matches = (direction === want);
   
   if (matches) {
     player.progress++;
@@ -1264,13 +1246,12 @@ function drawPatternUI(player) {
   // Only show pattern when playing or when anchors are set
   if (gameState !== 'playing' || !player.patternAnchor) return;
   
-  const basePs = 6; // pixel size for UI buttons/arrows (normal)
-  const gap = 8; // spacing between buttons
+  const basePs = 6; // pixel size for UI arrows (normal)
+  const gap = 8; // spacing between arrows
   const buttons = player.pattern;
   const idx = player.progress;
   const masks = {
-    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R,
-    A: BUTTON_A, B: BUTTON_B, C: BUTTON_C
+    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R
   };
   const iconW = ARROW_U[0].length; // all icons are 5x5
   const iconH = ARROW_U.length;
@@ -1324,16 +1305,8 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
   
   for (let rep = 0; rep < repetitions; rep++) {
     for (let i = 0; i < pattern.length; i++) {
-      let d = pattern[i];
-      // Convert buttons to their mapped directions
-      // A = Left, B = Up or Down (random), C = Right
-      if (d === 'A') {
-        d = 'L';
-      } else if (d === 'B') {
-        d = Math.random() < 0.5 ? 'U' : 'D'; // Random up or down
-      } else if (d === 'C') {
-        d = 'R';
-      }
+      const d = pattern[i];
+      // Pattern already contains directions (U, D, L, R)
       // Only spawn projectiles for movement directions
       if (DIRS.includes(d)) {
         const p = createProjectile(targetSide, d);
@@ -1695,7 +1668,7 @@ function showMenu() {
     color: '#888888'
   }).setOrigin(0.5).setDepth(1501);
 
-  const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + UIO | P2: Arrows + RTY', {
+  const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + IJKL | P2: Arrows + TFGH', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#666666'
