@@ -17,8 +17,7 @@ let g;
 let gPlayers; // graphics for players (rendered above UI)
 let p1 = { x: 200, y: 350, size: 24, color: 0x8899ff }; // Initial position in playable area
 let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in playable area
-let cursors;
-let wasd;
+let arcadeButtons = {}; // tracks arcade button states (e.g., 'P1U': true/false)
 let speed = 440; // px/s (doubled for faster movement)
 const TOP_UI_HEIGHT = 150; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
@@ -52,7 +51,7 @@ let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
 
 // Test mode: set to true to complete patterns with just the first symbol
-const testMode = false;
+const testMode = true;
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -86,25 +85,25 @@ const ARROW_L = [
 
 // Pixel button masks (5x5) for arcade buttons
 const BUTTON_A = [
-  [1,0,0,0,0],
-  [1,0,0,0,0],
+  [0,0,1,0,0],
+  [0,1,0,0,0],
   [1,1,1,1,1],
-  [1,0,0,0,0],
-  [1,0,0,0,0]
+  [0,1,0,0,0],
+  [0,0,1,0,0]
 ];
 const BUTTON_B = [
-  [1,1,1,1,1],
   [0,0,1,0,0],
-  [0,0,1,0,0],
+  [0,1,1,1,0],
+  [1,0,1,0,1],
   [0,0,1,0,0],
   [0,0,1,0,0]
 ];
 const BUTTON_C = [
-  [0,0,0,0,1],
-  [0,0,0,0,1],
+  [0,0,1,0,0],
+  [0,0,0,1,0],
   [1,1,1,1,1],
-  [0,0,0,0,1],
-  [0,0,0,0,1]
+  [0,0,0,1,0],
+  [0,0,1,0,0]
 ];
 
 // Fireball masks (two frames for simple animation)
@@ -267,6 +266,82 @@ const DIGITS = {
   ]
 };
 
+// =============================================================================
+// ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
+// =============================================================================
+// Reference: See button-layout.webp at hack.platan.us/assets/images/arcade/
+//
+// Maps arcade button codes to keyboard keys for local testing.
+// Each arcade code can map to multiple keyboard keys (array values).
+// The arcade cabinet sends codes like 'P1U', 'P1A', etc. when buttons are pressed.
+//
+// To use in your game:
+//   if (arcadeButtons['P1U']) { ... }  // Check if button is pressed
+//
+// CURRENT GAME USAGE (Two Players - Split Arena):
+//   - P1U/P1D/P1L/P1R (Joystick) → P1 Movement
+//   - P1A/P1B/P1C (Action Buttons) → P1 Pattern Input
+//   - P2U/P2D/P2L/P2R (Joystick) → P2 Movement
+//   - P2A/P2B/P2C (Action Buttons) → P2 Pattern Input
+//   - START1/START2 → Menu Navigation & Game Start
+// =============================================================================
+
+const ARCADE_CONTROLS = {
+  // ===== PLAYER 1 CONTROLS =====
+  // Joystick - Left hand on WASD
+  'P1U': ['w'],
+  'P1D': ['s'],
+  'P1L': ['a'],
+  'P1R': ['d'],
+  'P1DL': null,  // Diagonal down-left (no keyboard default)
+  'P1DR': null,  // Diagonal down-right (no keyboard default)
+
+  // Action Buttons - Right hand on home row area (ergonomic!)
+  // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
+  'P1A': ['u'],
+  'P1B': ['i'],
+  'P1C': ['o'],
+  'P1X': ['j'],
+  'P1Y': ['k'],
+  'P1Z': ['l'],
+
+  // Start Button
+  'START1': ['1', 'Enter'],
+
+  // ===== PLAYER 2 CONTROLS =====
+  // Joystick - Right hand on Arrow Keys
+  'P2U': ['ArrowUp'],
+  'P2D': ['ArrowDown'],
+  'P2L': ['ArrowLeft'],
+  'P2R': ['ArrowRight'],
+  'P2DL': null,  // Diagonal down-left (no keyboard default)
+  'P2DR': null,  // Diagonal down-right (no keyboard default)
+
+  // Action Buttons - Left hand (avoiding P1's WASD keys)
+  // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
+  'P2A': ['r'],
+  'P2B': ['t'],
+  'P2C': ['y'],
+  'P2X': ['f'],
+  'P2Y': ['g'],
+  'P2Z': ['h'],
+
+  // Start Button
+  'START2': ['2']
+};
+
+// Build reverse lookup: keyboard key → arcade button code
+const KEYBOARD_TO_ARCADE = {};
+for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
+  if (keyboardKeys) {
+    // Handle both array and single value
+    const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
+    keys.forEach(key => {
+      KEYBOARD_TO_ARCADE[key] = arcadeCode;
+    });
+  }
+}
+
 function create() {
   sceneRef = this; // store scene reference
   g = this.add.graphics();
@@ -286,22 +361,19 @@ function create() {
     });
   }
 
-  cursors = this.input.keyboard.createCursorKeys();
-  wasd = this.input.keyboard.addKeys({
-    up: Phaser.Input.Keyboard.KeyCodes.W,
-    left: Phaser.Input.Keyboard.KeyCodes.A,
-    down: Phaser.Input.Keyboard.KeyCodes.S,
-    right: Phaser.Input.Keyboard.KeyCodes.D
+  // Initialize arcade button states
+  Object.keys(ARCADE_CONTROLS).forEach(code => {
+    arcadeButtons[code] = false;
   });
 
   // Control instructions (hidden until game starts)
-  const p1Controls = this.add.text(100, 580, 'P1: WASD + ZXC', {
+  const p1Controls = this.add.text(100, 580, 'P1: WASD + UIO', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#8899ff'
   }).setOrigin(0.5).setVisible(false).setName('controls');
   
-  const p2Controls = this.add.text(700, 580, 'P2: Arrows + 123', {
+  const p2Controls = this.add.text(700, 580, 'P2: Arrows + RTY', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#ffdd00'
@@ -314,29 +386,36 @@ function create() {
   // Show menu
   showMenu();
 
-  // Input handling for pattern steps (only arcade buttons, not movement)
+  // Input handling - keyboard events mapped to arcade buttons
   this.input.keyboard.on('keydown', (ev) => {
+    const arcadeCode = KEYBOARD_TO_ARCADE[ev.key];
+    
+    // Set arcade button state
+    if (arcadeCode) {
+      arcadeButtons[arcadeCode] = true;
+    }
+    
     if (gameState === 'menu') {
-      // Navigate menu with Up/Down or W/S
-      if (ev.code === 'ArrowUp' || ev.code === 'KeyW') {
+      // Navigate menu with Up/Down
+      if (arcadeCode === 'P1U' || arcadeCode === 'P2U') {
         menuSelection = (menuSelection - 1 + 2) % 2;
         updateMenuSelection();
         return;
       }
-      if (ev.code === 'ArrowDown' || ev.code === 'KeyS') {
+      if (arcadeCode === 'P1D' || arcadeCode === 'P2D') {
         menuSelection = (menuSelection + 1) % 2;
         updateMenuSelection();
         return;
       }
-      // Start game with Space or Enter
-      if (ev.code === 'Space' || ev.code === 'Enter') {
+      // Start game with START buttons or Enter
+      if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
         gameMode = menuSelection === 0 ? 'singlePlayer' : 'twoPlayer';
         startGame();
         return;
       }
     } else if (gameState === 'gameOver') {
-      // Restart with Space or Enter
-      if (ev.code === 'Space' || ev.code === 'Enter') {
+      // Restart with START buttons or Enter
+      if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
         restartGame();
         return;
       }
@@ -349,15 +428,21 @@ function create() {
     
     if (gameState !== 'playing') return;
     
-    switch (ev.code) {
-      // P1 Arcade buttons (top 3: Z, X, C)
-      case 'KeyZ': tryStep(p1, 'A'); break; // Left button
-      case 'KeyX': tryStep(p1, 'B'); break; // Center button
-      case 'KeyC': tryStep(p1, 'C'); break; // Right button
-      // P2 Arcade buttons (top 3: Numpad 1, 2, 3)
-      case 'Numpad1': tryStep(p2, 'A'); break; // Left button
-      case 'Numpad2': tryStep(p2, 'B'); break; // Center button
-      case 'Numpad3': tryStep(p2, 'C'); break; // Right button
+    // Pattern step handling with arcade buttons
+    if (arcadeCode === 'P1A') tryStep(p1, 'A');
+    else if (arcadeCode === 'P1B') tryStep(p1, 'B');
+    else if (arcadeCode === 'P1C') tryStep(p1, 'C');
+    else if (arcadeCode === 'P2A') tryStep(p2, 'A');
+    else if (arcadeCode === 'P2B') tryStep(p2, 'B');
+    else if (arcadeCode === 'P2C') tryStep(p2, 'C');
+  });
+  
+  this.input.keyboard.on('keyup', (ev) => {
+    const arcadeCode = KEYBOARD_TO_ARCADE[ev.key];
+    
+    // Clear arcade button state
+    if (arcadeCode) {
+      arcadeButtons[arcadeCode] = false;
     }
   });
 }
@@ -511,23 +596,23 @@ function update(_time, delta) {
   // Don't update game if in menu
   if (gameState === 'menu') return;
 
-  // Input P1 (WASD)
+  // Input P1 (Arcade controls)
   let vx1 = 0, vy1 = 0;
-  if (gameState === 'playing' && wasd.left.isDown) vx1 -= 1;
-  if (gameState === 'playing' && wasd.right.isDown) vx1 += 1;
-  if (gameState === 'playing' && wasd.up.isDown) vy1 -= 1;
-  if (gameState === 'playing' && wasd.down.isDown) vy1 += 1;
+  if (gameState === 'playing' && arcadeButtons['P1L']) vx1 -= 1;
+  if (gameState === 'playing' && arcadeButtons['P1R']) vx1 += 1;
+  if (gameState === 'playing' && arcadeButtons['P1U']) vy1 -= 1;
+  if (gameState === 'playing' && arcadeButtons['P1D']) vy1 += 1;
   if (vx1 !== 0 && vy1 !== 0) { const s = Math.SQRT1_2; vx1 *= s; vy1 *= s; }
   const p1IsMoving = vx1 !== 0 || vy1 !== 0;
   p1.x += vx1 * speed * dt;
   p1.y += vy1 * speed * dt;
 
-  // Input P2 (Arrows)
+  // Input P2 (Arcade controls)
   let vx2 = 0, vy2 = 0;
-  if (gameState === 'playing' && cursors.left.isDown) vx2 -= 1;
-  if (gameState === 'playing' && cursors.right.isDown) vx2 += 1;
-  if (gameState === 'playing' && cursors.up.isDown) vy2 -= 1;
-  if (gameState === 'playing' && cursors.down.isDown) vy2 += 1;
+  if (gameState === 'playing' && arcadeButtons['P2L']) vx2 -= 1;
+  if (gameState === 'playing' && arcadeButtons['P2R']) vx2 += 1;
+  if (gameState === 'playing' && arcadeButtons['P2U']) vy2 -= 1;
+  if (gameState === 'playing' && arcadeButtons['P2D']) vy2 += 1;
   if (vx2 !== 0 && vy2 !== 0) { const s = Math.SQRT1_2; vx2 *= s; vy2 *= s; }
   const p2IsMoving = vx2 !== 0 || vy2 !== 0;
   p2.x += vx2 * speed * dt;
@@ -1610,7 +1695,7 @@ function showMenu() {
     color: '#888888'
   }).setOrigin(0.5).setDepth(1501);
 
-  const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + ZXC | P2: Arrows + 123', {
+  const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + UIO | P2: Arrows + RTY', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#666666'
