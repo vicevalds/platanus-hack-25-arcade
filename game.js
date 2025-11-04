@@ -943,6 +943,14 @@ function update(_time, delta) {
     if (gameMode === 'twoPlayer') {
       drawPatternUI(p2);
     }
+    
+    // Update and draw score popups
+    updateScorePopups(p1, dt, _time);
+    drawScorePopups(p1);
+    if (gameMode === 'twoPlayer') {
+      updateScorePopups(p2, dt, _time);
+      drawScorePopups(p2);
+    }
   } else {
     // Hide health bars, patterns, and scores when game is not playing
     p1.healthGfx.clear();
@@ -951,6 +959,8 @@ function update(_time, delta) {
     p2.patternGfx.clear();
     p1.scoreGfx.clear();
     p2.scoreGfx.clear();
+    if (p1.scorePopupGfx) p1.scorePopupGfx.clear();
+    if (p2.scorePopupGfx) p2.scorePopupGfx.clear();
   }
 }
 
@@ -1272,6 +1282,8 @@ function initPlayerUI(scene, player, side) {
   player.hasShield = false; // Shield from buk pickup
   player.wildcardDirections = []; // Directions pressed for wildcard patterns
   player.errorFlashUntil = 0; // Error flash timestamp
+  player.patternErrors = 0; // Track errors in current pattern
+  player.scorePopups = []; // Array of active score popups {amount, x, y, life, maxLife}
   player.healthGfx = scene.add.graphics();
   player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
@@ -1283,9 +1295,11 @@ function initPlayerUI(scene, player, side) {
   player.patternGfx.setDepth(50); // Above arena (10) but below players (100)
   player.scoreGfx = scene.add.graphics();
   player.scoreGfx.setDepth(50); // Above arena (10) but below players (100)
+  player.scorePopupGfx = scene.add.graphics();
+  player.scorePopupGfx.setDepth(60); // Above score
   
   // Set score position (will be updated in positionUI for single player)
-  player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 20 };
+  player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 65 }; // Moved down to y: 65 to avoid health bar
   player.scoreAlignRight = side === 'R';
   
   // fixed positions at the top of each half
@@ -1375,6 +1389,9 @@ function tryStep(player, input) {
       player.wildcardDirections.push(direction);
     }
     
+    // Add 10 points for each correct symbol
+    player.score += 10;
+    showScorePopup(player, 10, sceneRef.time.now);
     player.progress++;
     
     // Test mode: complete pattern immediately on first correct input
@@ -1383,7 +1400,12 @@ function tryStep(player, input) {
     }
     
     if (player.progress >= player.pattern.length) {
-      player.score++;
+      // Check if pattern was completed without errors
+      if (player.patternErrors === 0) {
+        player.score += 10; // Bonus for perfect completion
+        showScorePopup(player, 10, sceneRef.time.now);
+      }
+      
       // Play success sound
       playSuccessSound();
       // Recover 50% of max health when completing pattern (capped at max health)
@@ -1396,12 +1418,17 @@ function tryStep(player, input) {
       player.pattern = makePattern();
       player.progress = 0;
       player.wildcardDirections = []; // Reset wildcard directions
+      player.patternErrors = 0; // Reset error count for new pattern
     }
   } else {
     // Play error sound on mistake
     playErrorSound();
     // Set error flash timestamp (flash for 400ms)
     player.errorFlashUntil = sceneRef.time.now + 400;
+    // Subtract 10 points for mistake
+    player.score = Math.max(0, player.score - 10);
+    showScorePopup(player, -10, sceneRef.time.now);
+    player.patternErrors++; // Track error
     player.progress = 0;
     player.wildcardDirections = []; // Reset on mistake
   }
@@ -1419,13 +1446,13 @@ function positionUI(player) {
   let centerX;
   if (gameMode === 'singlePlayer' && player === p1) {
     centerX = 400; // center of screen
-    // Also center the score
-    player.scoreAnchor = { x: 20, y: 20 };
+    // Also adjust the score position for single player
+    player.scoreAnchor = { x: 20, y: 65 }; // Moved down to avoid health bar
     player.scoreAlignRight = false;
   } else {
     centerX = player.side === 'L' ? 200 : 600;
-    // Reset score position for two player mode
-    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: 20 };
+    // Reset score position for two player mode (moved down to avoid health bar)
+    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: 65 };
     player.scoreAlignRight = player.side === 'R';
   }
   
@@ -1437,6 +1464,101 @@ function positionUI(player) {
     drawScore(player);
     drawHealthBar(player);
     drawPatternUI(player);
+  }
+}
+
+function showScorePopup(player, amount, now) {
+  if (!player.scorePopups) player.scorePopups = [];
+  
+  // Create popup at score position
+  const x = player.scoreAnchor.x + (player.scoreAlignRight ? -40 : 80);
+  const y = player.scoreAnchor.y;
+  
+  player.scorePopups.push({
+    amount: amount,
+    x: x,
+    y: y,
+    startY: y,
+    life: 0,
+    maxLife: 1000 // 1 second
+  });
+}
+
+function updateScorePopups(player, dt, now) {
+  if (!player.scorePopups) return;
+  
+  // Update and remove expired popups
+  for (let i = player.scorePopups.length - 1; i >= 0; i--) {
+    const popup = player.scorePopups[i];
+    popup.life += dt * 1000; // Convert to ms
+    
+    // Remove if expired
+    if (popup.life >= popup.maxLife) {
+      player.scorePopups.splice(i, 1);
+    }
+  }
+}
+
+function drawScorePopups(player) {
+  if (!player.scorePopups || !player.scorePopupGfx) return;
+  
+  const gfx = player.scorePopupGfx;
+  gfx.clear();
+  
+  for (const popup of player.scorePopups) {
+    // Calculate alpha based on life (fade out)
+    const progress = popup.life / popup.maxLife;
+    const alpha = 1 - progress;
+    
+    // Move popup upward
+    const offsetY = -progress * 30; // Move up 30 pixels
+    const currentY = popup.startY + offsetY;
+    
+    // Color: green for positive, red for negative
+    const color = popup.amount >= 0 ? 0x00ff00 : 0xff0000;
+    
+    // Format text (with + or -)
+    const text = (popup.amount >= 0 ? '+' : '') + String(popup.amount);
+    
+    // Draw using pixel digits (smaller size)
+    const ps = 3; // pixel size (smaller than score)
+    const gap = 1;
+    
+    gfx.fillStyle(color, alpha);
+    
+    let x = popup.x;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      let d;
+      
+      // Handle special characters
+      if (char === '+') {
+        // Simple plus: 3x3
+        d = [
+          [0,1,0],
+          [1,1,1],
+          [0,1,0]
+        ];
+      } else if (char === '-') {
+        // Simple minus: 3x1
+        d = [
+          [0,0,0],
+          [1,1,1],
+          [0,0,0]
+        ];
+      } else {
+        d = DIGITS[char];
+      }
+      
+      if (!d) continue;
+      
+      for (let r = 0; r < d.length; r++) {
+        for (let c = 0; c < d[r].length; c++) {
+          if (d[r][c]) gfx.fillRect(x + c * ps, currentY + r * ps, ps, ps);
+        }
+      }
+      x += d[0].length * ps + gap;
+    }
   }
 }
 
@@ -1801,9 +1923,10 @@ function onPlayerHit(player, now, dmg = 1) {
   const baseDamage = 22.5; // base damage per hit (reduced to half)
   const finalDamage = dmg * baseDamage * roundMultiplier;
   
-  // Reduce both score and health
-  // Round dmg to nearest integer for score to avoid decimal scores
-  player.score = Math.max(0, (player.score || 0) - Math.round(dmg));
+  // Subtract 5 points for taking damage
+  player.score = Math.max(0, player.score - 5);
+  showScorePopup(player, -5, now);
+  
   player.health = Math.max(0, (player.health || 0) - finalDamage);
   
   drawScore(player);
@@ -2049,6 +2172,10 @@ function startGame() {
   p2.wildcardDirections = [];
   p1.errorFlashUntil = 0;
   p2.errorFlashUntil = 0;
+  p1.patternErrors = 0;
+  p2.patternErrors = 0;
+  p1.scorePopups = [];
+  p2.scorePopups = [];
   
   // Reset power-up system
   activePowerUpType = null;
@@ -2151,6 +2278,10 @@ function restartGame() {
   p2.wildcardDirections = [];
   p1.errorFlashUntil = 0;
   p2.errorFlashUntil = 0;
+  p1.patternErrors = 0;
+  p2.patternErrors = 0;
+  p1.scorePopups = [];
+  p2.scorePopups = [];
   
   // Reset power-up system
   activePowerUpType = null;
@@ -2276,6 +2407,10 @@ function returnToMenu() {
   p2.wildcardDirections = [];
   p1.errorFlashUntil = 0;
   p2.errorFlashUntil = 0;
+  p1.patternErrors = 0;
+  p2.patternErrors = 0;
+  p1.scorePopups = [];
+  p2.scorePopups = [];
   
   // Clear all UI graphics
   if (p1.healthGfx) p1.healthGfx.clear();
@@ -2413,7 +2548,10 @@ function updateShieldP1(now) {
     if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       playPowerUpSound();
       p1.health = p1.maxHealth; // Fill health to 100%
+      p1.score += 20; // Add 20 points for picking up power-up
+      showScorePopup(p1, 20, now);
       drawHealthBar(p1);
+      drawScore(p1);
       shieldP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
@@ -2506,7 +2644,10 @@ function updateShieldP2(now) {
     if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
       playPowerUpSound();
       p2.health = p2.maxHealth; // Fill health to 100%
+      p2.score += 20; // Add 20 points for picking up power-up
+      showScorePopup(p2, 20, now);
       drawHealthBar(p2);
+      drawScore(p2);
       shieldP2 = null;
       nextPowerUpP2At = now + (5000 + Math.random() * 3000);
     }
@@ -2557,6 +2698,9 @@ function updateBukP1(now) {
     if (distSq(p1.x, p1.y, bukP1.x, bukP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       playPowerUpSound();
       p1.hasShield = true;
+      p1.score += 20; // Add 20 points for picking up power-up
+      showScorePopup(p1, 20, now);
+      drawScore(p1);
       bukP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
@@ -2607,6 +2751,9 @@ function updateBukP2(now) {
     if (distSq(p2.x, p2.y, bukP2.x, bukP2.y) <= (p2.size + 10) * (p2.size + 10)) {
       playPowerUpSound();
       p2.hasShield = true;
+      p2.score += 20; // Add 20 points for picking up power-up
+      showScorePopup(p2, 20, now);
+      drawScore(p2);
       bukP2 = null;
       nextPowerUpP2At = now + (5000 + Math.random() * 3000);
     }
@@ -2712,6 +2859,10 @@ function updateAwsP1(now) {
         hits: 0 
       });
       
+      p1.score += 20; // Add 20 points for picking up power-up
+      showScorePopup(p1, 20, now);
+      drawScore(p1);
+      
       awsP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
@@ -2771,6 +2922,10 @@ function updateAwsP2(now) {
         size: p2.size, // Use player size for scaling
         hits: 0 
       });
+      
+      p2.score += 20; // Add 20 points for picking up power-up
+      showScorePopup(p2, 20, now);
+      drawScore(p2);
       
       awsP2 = null;
       nextPowerUpP2At = now + (5000 + Math.random() * 3000);
