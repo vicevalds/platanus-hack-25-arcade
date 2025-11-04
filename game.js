@@ -2337,6 +2337,14 @@ function updateShieldP1(now) {
         spawnShieldP1(now);
         activePowerUpType = 'shield';
         nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+      } else if (randomType === 'buk') {
+        spawnBukP1(now);
+        activePowerUpType = 'buk';
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+      } else if (randomType === 'aws') {
+        spawnAwsP1(now);
+        activePowerUpType = 'aws';
+        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
       }
     }
   }
