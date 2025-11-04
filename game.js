@@ -152,6 +152,15 @@ const STAR_B = [
   [0,1,0,1,0]
 ];
 
+// Wildcard mask (empty circle) - for pattern UI
+const WILDCARD = [
+  [0,1,1,1,0],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [0,1,1,1,0]
+];
+
 const BUK_LOGO = [
   [0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0],
   [0,0,0,1,0,0,0,1,0,1,0,1,0,1,0,0,0],
@@ -168,15 +177,15 @@ const AWS_LOGO = [
   [1,1,0,1,1,0,0,1,0,1,0,0,0,0,1,1,1]
 ];
 
-// Wall mask (3 columns x 7 rows) - vertical bar with pattern
+// Wall mask (2 columns x 7 rows) - vertical bar with pattern
 const WALL_MASK = [
-  [1,1,1],
-  [1,0,1],
-  [1,1,1],
-  [1,0,1],
-  [1,1,1],
-  [1,0,1],
-  [1,1,1]
+  [1,1],
+  [1,1],
+  [1,1],
+  [1,1],
+  [1,1],
+  [1,1],
+  [1,1]
 ];
 
 // Pixel digit masks (3x5)
@@ -633,7 +642,7 @@ function update(_time, delta) {
     currentRound = Math.floor(elapsedSeconds / 10) + 1;
     
     // Base health drain rate increases with each round
-    const baseHealthDrainRate = 15; // health per second
+    const baseHealthDrainRate = 0; // health per second
     const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
@@ -1098,6 +1107,7 @@ function initPlayerUI(scene, player, side) {
   player.maxHealth = 100;
   player.health = player.maxHealth;
   player.hasShield = false; // Shield from buk pickup
+  player.wildcardDirections = []; // Directions pressed for wildcard patterns
   player.healthGfx = scene.add.graphics();
   player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
@@ -1152,10 +1162,19 @@ function makePattern() {
   }
   
   const arr = [];
+  const directions = ['U', 'D', 'L', 'R'];
+  
+  // Generate pattern with only directions first
   for (let i = 0; i < len; i++) {
-    // Use all 4 directions (U, D, L, R)
-    arr.push(DIRS[(Math.random() * 4) | 0]);
+    arr.push(directions[(Math.random() * 4) | 0]);
   }
+  
+  // 15% chance to replace ONE random symbol with a wildcard
+  if (Math.random() < 0.15) {
+    const wildcardPos = (Math.random() * len) | 0;
+    arr[wildcardPos] = 'W';
+  }
+  
   return arr;
 }
 
@@ -1182,9 +1201,16 @@ function tryStep(player, input) {
   const direction = BUTTON_TO_DIR[input];
   
   // Check if the direction matches the expected pattern direction
-  const matches = (direction === want);
+  // If pattern expects wildcard ('W'), accept any direction
+  const matches = (want === 'W') || (direction === want);
   
   if (matches) {
+    // If this was a wildcard, save the direction pressed for projectile spawning
+    if (want === 'W') {
+      if (!player.wildcardDirections) player.wildcardDirections = [];
+      player.wildcardDirections.push(direction);
+    }
+    
     player.progress++;
     
     // Test mode: complete pattern immediately on first correct input
@@ -1203,9 +1229,11 @@ function tryStep(player, input) {
       spawnAttackPattern(targetSide, completed, player);
       player.pattern = makePattern();
       player.progress = 0;
+      player.wildcardDirections = []; // Reset wildcard directions
     }
   } else {
     player.progress = 0;
+    player.wildcardDirections = []; // Reset on mistake
   }
   refreshPatternTexts(player);
   drawScore(player);
@@ -1290,7 +1318,8 @@ function drawPatternUI(player) {
   const buttons = player.pattern;
   const idx = player.progress;
   const masks = {
-    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R
+    U: ARROW_U, D: ARROW_D, L: ARROW_L, R: ARROW_R,
+    W: WILDCARD // Wildcard: empty circle
   };
   const iconW = ARROW_U[0].length; // all icons are 5x5
   const iconH = ARROW_U.length;
@@ -1323,8 +1352,17 @@ function drawPatternUI(player) {
     const y0 = Math.floor(player.patternAnchor.y - (iconH * ps) / 2);
     let color;
     if (i < idx) color = 0x777777; // passed -> gray
-    else if (isCurrent) color = 0x00ff66; // current -> green, larger
-    else color = 0xffffff; // upcoming -> white
+    else if (isCurrent) {
+      // Current symbol: green if normal, white for wildcard
+      if (btn === 'W') {
+        color = 0xffffff; // White for wildcard
+      } else {
+        color = 0x00ff66; // Green for normal arrows
+      }
+    } else {
+      // Upcoming: white for all symbols
+      color = 0xffffff; // White for all upcoming symbols
+    }
     gfx.fillStyle(color, 1);
     for (let r = 0; r < mask.length; r++) {
       for (let c = 0; c < mask[r].length; c++) {
@@ -1342,34 +1380,34 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
   // In single player mode, double the number of projectiles
   const repetitions = (gameMode === 'singlePlayer' && isP1) ? 2 : 1;
   
+  // Track wildcard index for multiple wildcards
+  let wildcardIdx = 0;
+  
   for (let rep = 0; rep < repetitions; rep++) {
+    wildcardIdx = 0; // Reset for each repetition
     for (let i = 0; i < pattern.length; i++) {
       const d = pattern[i];
-      // Pattern already contains directions (U, D, L, R)
-      // Only spawn projectiles for movement directions
-      if (DIRS.includes(d)) {
-        const p = createProjectile(targetSide, d);
+      
+      // Check if this is a wildcard ('W')
+      if (d === 'W') {
+        // Use the saved wildcard direction for this wildcard
+        const wildcardDirs = attacker.wildcardDirections || [];
+        const wildcardDir = wildcardDirs[wildcardIdx];
+        wildcardIdx++;
         
-        // In single player mode, always use skeleton design (bones)
-        if (gameMode === 'singlePlayer' && isP1) {
-          // 15% probability for extra damage attack (stone ball - 1.5x damage)
-          if (Math.random() < 0.15) {
-            p.dmg = 1.5;
-            p.ps = 10;
+        if (wildcardDir && DIRS.includes(wildcardDir)) {
+          const p = createProjectile(targetSide, wildcardDir);
+          
+          // Wildcard always spawns special projectile (double damage)
+          p.dmg = 2; // Double damage for wildcard
+          p.ps = 10;
+          
+          // In single player mode, always use skeleton design (stone)
+          if (gameMode === 'singlePlayer' && isP1) {
             p.type = 'stone';
             p.color = 0x666666; // gray stone
           } else {
-            // Normal attack (bone)
-            p.ps = 8;
-            p.type = 'bone';
-            p.color = 0xeeeeee; // white bone
-          }
-        } else {
-          // Two player mode: use normal projectile designs
-          // 15% probability for extra damage attack (1.5x damage)
-          if (Math.random() < 0.15) {
-            p.dmg = 1.5;
-            p.ps = 10;
+            // Two player mode: use player-specific special projectile
             if (isP1) {
               // P1 (mago): star
               p.type = 'star';
@@ -1379,18 +1417,30 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
               p.type = 'stone';
               p.color = 0x666666; // gray stone
             }
+          }
+          arr.push(p);
+        }
+      } else if (DIRS.includes(d)) {
+        // Normal direction (not wildcard)
+        const p = createProjectile(targetSide, d);
+        
+        // In single player mode, always use skeleton design (bones)
+        if (gameMode === 'singlePlayer' && isP1) {
+          // Normal attack (bone)
+          p.ps = 8;
+          p.type = 'bone';
+          p.color = 0xeeeeee; // white bone
+        } else {
+          // Two player mode: use normal projectile designs
+          p.ps = 8;
+          if (isP1) {
+            // P1 (mago): fireball
+            p.type = 'fire';
+            p.color = 0xff6a00; // fiery orange
           } else {
-            // Normal attacks
-            p.ps = 8;
-            if (isP1) {
-              // P1 (mago): fireball
-              p.type = 'fire';
-              p.color = 0xff6a00; // fiery orange
-            } else {
-              // P2 (skeleton): bone
-              p.type = 'bone';
-              p.color = 0xeeeeee; // white bone
-            }
+            // P2 (skeleton): bone
+            p.type = 'bone';
+            p.color = 0xeeeeee; // white bone
           }
         }
         arr.push(p);
@@ -1489,9 +1539,9 @@ function updateProjectiles(dt, now) {
       for (let w = 0; w < walls.length; w++) {
         const wall = walls[w];
         // Calculate wall dimensions from mask
-        const cols = WALL_MASK[0].length; // 3
+        const cols = WALL_MASK[0].length; // 2
         const rows = WALL_MASK.length; // 7
-        const ps = Math.max(2, Math.floor((wall.size * 2) / cols));
+        const ps = Math.max(2, Math.floor(wall.size / cols));
         const wallWidth = cols * ps;
         const wallHeight = rows * ps;
         const hw = wallWidth / 2;
@@ -1806,6 +1856,8 @@ function startGame() {
   p2.pattern = makePattern();
   p1.immuneUntil = 0;
   p2.immuneUntil = 0;
+  p1.wildcardDirections = [];
+  p2.wildcardDirections = [];
   
   // Position players based on mode
   if (gameMode === 'singlePlayer') {
@@ -1897,6 +1949,8 @@ function restartGame() {
   p2.pattern = makePattern();
   p1.immuneUntil = 0;
   p2.immuneUntil = 0;
+  p1.wildcardDirections = [];
+  p2.wildcardDirections = [];
   projL = [];
   projR = [];
   shieldP1 = null;
@@ -2005,6 +2059,8 @@ function returnToMenu() {
   p2.immuneUntil = 0;
   p1.hasShield = false;
   p2.hasShield = false;
+  p1.wildcardDirections = [];
+  p2.wildcardDirections = [];
   
   // Clear all UI graphics
   if (p1.healthGfx) p1.healthGfx.clear();
@@ -2042,7 +2098,7 @@ function updateShieldP1(now) {
       // set an initial delay so it doesn't appear immediately
       nextShieldP1At = now + (5000 + Math.random() * 3000); // 5-8s initial spawn
     } else if (now >= nextShieldP1At) {
-      spawnShieldP1();
+      spawnShieldP1(now);
     }
   }
   // draw and check pickup
@@ -2086,6 +2142,13 @@ function updateShieldP1(now) {
       }
     }
 
+    // Check if power-up has expired (4 seconds)
+    if (now - shieldP1.spawnTime > 4000) {
+      shieldP1 = null;
+      nextShieldP1At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+      return;
+    }
+
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       p1.health = p1.maxHealth; // Fill health to 100%
@@ -2103,7 +2166,7 @@ function updateShieldP2(now) {
       // set an initial delay so it doesn't appear immediately
       nextShieldP2At = now + (5000 + Math.random() * 3000); // 5-8s initial spawn
     } else if (now >= nextShieldP2At) {
-      spawnShieldP2();
+      spawnShieldP2(now);
     }
   }
   // draw and check pickup
@@ -2147,6 +2210,13 @@ function updateShieldP2(now) {
       }
     }
 
+    // Check if power-up has expired (4 seconds)
+    if (now - shieldP2.spawnTime > 4000) {
+      shieldP2 = null;
+      nextShieldP2At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+      return;
+    }
+
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
       p2.health = p2.maxHealth; // Fill health to 100%
@@ -2164,7 +2234,7 @@ function updateBukP1(now) {
       // set an initial delay so it doesn't appear immediately
       nextBukP1At = now + (8000 + Math.random() * 4000); // 8-12s initial spawn (longer than banana)
     } else if (now >= nextBukP1At) {
-      spawnBukP1();
+      spawnBukP1(now);
     }
   }
   // draw and check pickup
@@ -2186,6 +2256,13 @@ function updateBukP1(now) {
       }
     }
 
+    // Check if power-up has expired (4 seconds)
+    if (now - bukP1.spawnTime > 4000) {
+      bukP1 = null;
+      nextBukP1At = now + (8000 + Math.random() * 4000); // respawn in 8-12s
+      return;
+    }
+
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, bukP1.x, bukP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       p1.hasShield = true;
@@ -2202,7 +2279,7 @@ function updateBukP2(now) {
       // set an initial delay so it doesn't appear immediately
       nextBukP2At = now + (8000 + Math.random() * 4000); // 8-12s initial spawn (longer than banana)
     } else if (now >= nextBukP2At) {
-      spawnBukP2();
+      spawnBukP2(now);
     }
   }
   // draw and check pickup
@@ -2222,6 +2299,13 @@ function updateBukP2(now) {
       for (let c = 0; c < BUK_LOGO[r].length; c++) {
         if (BUK_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
       }
+    }
+
+    // Check if power-up has expired (4 seconds)
+    if (now - bukP2.spawnTime > 4000) {
+      bukP2 = null;
+      nextBukP2At = now + (8000 + Math.random() * 4000); // respawn in 8-12s
+      return;
     }
 
     // pickup check for P2 only
@@ -2285,7 +2369,7 @@ function updateAwsP1(now) {
       // set an initial delay so it doesn't appear immediately
       nextAwsP1At = now + (10000 + Math.random() * 5000); // 10-15s initial spawn (longer than buk)
     } else if (now >= nextAwsP1At) {
-      spawnAwsP1();
+      spawnAwsP1(now);
     }
   }
   // draw and check pickup
@@ -2305,6 +2389,13 @@ function updateAwsP1(now) {
       for (let c = 0; c < AWS_LOGO[r].length; c++) {
         if (AWS_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
       }
+    }
+
+    // Check if power-up has expired (4 seconds)
+    if (now - awsP1.spawnTime > 4000) {
+      awsP1 = null;
+      nextAwsP1At = now + (10000 + Math.random() * 5000); // respawn in 10-15s
+      return;
     }
 
     // pickup check for P1 only
@@ -2333,7 +2424,7 @@ function updateAwsP2(now) {
       // set an initial delay so it doesn't appear immediately
       nextAwsP2At = now + (10000 + Math.random() * 5000); // 10-15s initial spawn (longer than buk)
     } else if (now >= nextAwsP2At) {
-      spawnAwsP2();
+      spawnAwsP2(now);
     }
   }
   // draw and check pickup
@@ -2355,6 +2446,13 @@ function updateAwsP2(now) {
       }
     }
 
+    // Check if power-up has expired (4 seconds)
+    if (now - awsP2.spawnTime > 4000) {
+      awsP2 = null;
+      nextAwsP2At = now + (10000 + Math.random() * 5000); // respawn in 10-15s
+      return;
+    }
+
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, awsP2.x, awsP2.y) <= (p2.size + 10) * (p2.size + 10)) {
       // Create wall at AWS position (same size as player for visual consistency)
@@ -2374,7 +2472,7 @@ function updateAwsP2(now) {
   }
 }
 
-function spawnAwsP1() {
+function spawnAwsP1(now) {
   const margin = 20;
   const halfX = 400;
   // In single player mode, spawn across full screen; otherwise in P1's half
@@ -2386,28 +2484,28 @@ function spawnAwsP1() {
   }
   // Spawn AWS only in playable area (below top UI section)
   y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  awsP1 = { x, y, ps: 3 }; // ps: 3 for smaller size
+  awsP1 = { x, y, ps: 3, spawnTime: now }; // ps: 3 for smaller size
 }
 
-function spawnAwsP2() {
+function spawnAwsP2(now) {
   const margin = 20;
   const halfX = 400;
   // Spawn in P2's half (right side)
   const x = halfX + margin + Math.random() * (halfX - margin * 2);
   // Spawn AWS only in playable area (below top UI section)
   const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  awsP2 = { x, y, ps: 3 }; // ps: 3 for smaller size
+  awsP2 = { x, y, ps: 3, spawnTime: now }; // ps: 3 for smaller size
 }
 
 function drawWalls() {
-  // Draw all active walls using pixel mask (3x7 pixels, scaled like player)
+  // Draw all active walls using pixel mask (2x7 pixels, smaller size)
   for (let i = 0; i < walls.length; i++) {
     const wall = walls[i];
-    const cols = WALL_MASK[0].length; // 3
+    const cols = WALL_MASK[0].length; // 2
     const rows = WALL_MASK.length; // 7
     
-    // Scale to fit wall size (similar to player scaling)
-    const ps = Math.max(2, Math.floor((wall.size * 2) / cols));
+    // Smaller wall size (reduced from wall.size * 2 to wall.size * 1)
+    const ps = Math.max(2, Math.floor(wall.size / cols));
     const w = cols * ps;
     const h = rows * ps;
     const sx = Math.floor(wall.x - w / 2);
