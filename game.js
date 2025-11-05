@@ -61,7 +61,7 @@ let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
 
 // Test mode: set to true to complete patterns with just the first symbol
-const testMode = true;
+const testMode = false;
 
 // Audio variables
 let audioContext;
@@ -501,6 +501,39 @@ function playGameMusic() {
   currentMusic = gameMusicLoop;
 }
 
+function playVictoryMusic() {
+  if (!audioContext) initAudio();
+  stopMusic();
+  
+  // Victory fanfare (triumphant celebratory theme)
+  const melody = [
+    { freq: 523, dur: 0.15 }, // C5
+    { freq: 659, dur: 0.15 }, // E5
+    { freq: 784, dur: 0.15 }, // G5
+    { freq: 1047, dur: 0.3 }, // C6
+    { freq: 784, dur: 0.15 }, // G5
+    { freq: 1047, dur: 0.3 }, // C6
+    { freq: 1047, dur: 0.2 }, // C6
+    { freq: 988, dur: 0.2 },  // B5
+    { freq: 880, dur: 0.2 },  // A5
+    { freq: 784, dur: 0.2 },  // G5
+    { freq: 659, dur: 0.2 },  // E5
+    { freq: 784, dur: 0.4 },  // G5
+    { freq: 1047, dur: 0.6 }  // C6 (final sustained note)
+  ];
+  
+  let time = 0;
+  melody.forEach(note => {
+    setTimeout(() => {
+      playTone(note.freq, note.dur, 'square', 0.1);
+    }, time * 1000);
+    time += note.dur;
+  });
+  
+  // Victory music doesn't loop, it's a one-time fanfare
+  currentMusic = 'victory';
+}
+
 function stopMusic() {
   if (introMusicLoop) {
     clearInterval(introMusicLoop);
@@ -767,6 +800,10 @@ function update(_time, delta) {
     if (gameOverText.winnerText) gameOverText.winnerText.setScale(scale);
     if (gameOverText.loserText) gameOverText.loserText.setScale(scale);
     if (gameOverText.gameOverTitle) gameOverText.gameOverTitle.setScale(scale);
+    // Also animate score texts (slightly less pulsation)
+    const scoreScale = 1 + Math.sin(_time / 200) * 0.05;
+    if (gameOverText.winnerScoreText) gameOverText.winnerScoreText.setScale(scoreScale);
+    if (gameOverText.loserScoreText) gameOverText.loserScoreText.setScale(scoreScale);
   }
 
   // Don't update game if in menu
@@ -800,12 +837,12 @@ function update(_time, delta) {
 
   // Health drain over time (if playing)
   if (gameState === 'playing') {
-    // Calculate current round based on elapsed time (10 seconds per round)
+    // Calculate current round based on elapsed time (7 seconds per round)
     const elapsedSeconds = (_time - gameStartTime) / 1000;
-    currentRound = Math.floor(elapsedSeconds / 10) + 1;
+    currentRound = Math.floor(elapsedSeconds / 7) + 1;
     
     // Base health drain rate increases with each round
-    const baseHealthDrainRate = 0; // health per second
+    const baseHealthDrainRate = 18; // health per second
     const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
@@ -1236,8 +1273,8 @@ function drawTimer(now) {
     
     // Draw countdown timer below round
     const elapsed = (now - gameStartTime) / 1000;
-    const timeInRound = elapsed % 10;
-    const countdown = Math.max(0, Math.floor(10 - timeInRound));
+    const timeInRound = elapsed % 7;
+    const countdown = Math.max(0, Math.floor(7 - timeInRound));
     const timeText = String(countdown).padStart(2, '0');
     
     // Calculate width for time
@@ -1265,8 +1302,8 @@ function drawTimer(now) {
     drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
     
     const elapsed = (now - gameStartTime) / 1000;
-    const timeInRound = elapsed % 10;
-    const countdown = Math.max(0, Math.floor(10 - timeInRound));
+    const timeInRound = elapsed % 7;
+    const countdown = Math.max(0, Math.floor(7 - timeInRound));
     const text = String(countdown).padStart(2, '0');
     drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
   }
@@ -1284,6 +1321,7 @@ function initPlayerUI(scene, player, side) {
   player.errorFlashUntil = 0; // Error flash timestamp
   player.patternErrors = 0; // Track errors in current pattern
   player.scorePopups = []; // Array of active score popups {amount, x, y, life, maxLife}
+  player.pendingScore = 0; // Points accumulated during current pattern (not yet added to total)
   player.healthGfx = scene.add.graphics();
   player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
@@ -1389,9 +1427,9 @@ function tryStep(player, input) {
       player.wildcardDirections.push(direction);
     }
     
-    // Add 10 points for each correct symbol
-    player.score += 10;
-    showScorePopup(player, 10, sceneRef.time.now);
+    // Accumulate 10 points for each correct symbol (not added to total yet)
+    player.pendingScore += 10;
+    // NO mostrar popup aquí - solo al completar el patrón
     player.progress++;
     
     // Test mode: complete pattern immediately on first correct input
@@ -1400,11 +1438,19 @@ function tryStep(player, input) {
     }
     
     if (player.progress >= player.pattern.length) {
+      // Pattern completed! Add all pending points to total score
+      let totalEarned = player.pendingScore;
+      
       // Check if pattern was completed without errors
       if (player.patternErrors === 0) {
-        player.score += 10; // Bonus for perfect completion
-        showScorePopup(player, 10, sceneRef.time.now);
+        totalEarned += 10; // Bonus for perfect completion
       }
+      
+      // Add all earned points to total score
+      player.score += totalEarned;
+      
+      // Show popup with total earned points
+      showScorePopup(player, totalEarned, sceneRef.time.now);
       
       // Play success sound
       playSuccessSound();
@@ -1419,18 +1465,20 @@ function tryStep(player, input) {
       player.progress = 0;
       player.wildcardDirections = []; // Reset wildcard directions
       player.patternErrors = 0; // Reset error count for new pattern
+      player.pendingScore = 0; // Reset pending score for new pattern
     }
   } else {
     // Play error sound on mistake
     playErrorSound();
     // Set error flash timestamp (flash for 400ms)
     player.errorFlashUntil = sceneRef.time.now + 400;
-    // Subtract 10 points for mistake
+    // Subtract 10 points for mistake (from total score)
     player.score = Math.max(0, player.score - 10);
     showScorePopup(player, -10, sceneRef.time.now);
     player.patternErrors++; // Track error
     player.progress = 0;
     player.wildcardDirections = []; // Reset on mistake
+    player.pendingScore = 0; // Lose all pending points on mistake
   }
   refreshPatternTexts(player);
   drawScore(player);
@@ -1947,8 +1995,8 @@ function endGame(winner, loser) {
   if (gameState === 'gameOver' || !sceneRef) return; // already ended or no scene
   gameState = 'gameOver';
   
-  // Stop music when game ends
-  stopMusic();
+  // Play victory music
+  playVictoryMusic();
   
   // Semi-transparent overlay
   const overlay = sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
@@ -1978,25 +2026,44 @@ function endGame(winner, loser) {
     gameOverText = { overlay, gameOverTitle, finalScore };
   } else {
     // Two player mode: Winner/Loser messages
-    winnerText = sceneRef.add.text(winner.side === 'L' ? 200 : 600, 220, 'WINNER', {
+    const winnerX = winner.side === 'L' ? 200 : 600;
+    const loserX = loser.side === 'L' ? 200 : 600;
+    
+    winnerText = sceneRef.add.text(winnerX, 200, 'WINNER', {
       fontSize: '56px',
       fontFamily: 'Arial',
       color: '#00ff00',
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
-    loserText = sceneRef.add.text(loser.side === 'L' ? 200 : 600, 220, 'LOSER', {
+    // Winner score below WINNER text
+    const winnerScoreText = sceneRef.add.text(winnerX, 260, 'Score: ' + (winner.score || 0), {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#88ff88',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+    
+    loserText = sceneRef.add.text(loserX, 200, 'LOSER', {
       fontSize: '56px',
       fontFamily: 'Arial',
       color: '#ff4444',
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
-    gameOverText = { overlay, winnerText, loserText };
+    // Loser score below LOSER text
+    const loserScoreText = sceneRef.add.text(loserX, 260, 'Score: ' + (loser.score || 0), {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#ff8888',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+    
+    gameOverText = { overlay, winnerText, loserText, winnerScoreText, loserScoreText };
   }
   
   // Restart button (default option)
-  const restartText = sceneRef.add.text(400, 360, 'Press SPACE or ENTER to restart', {
+  const restartText = sceneRef.add.text(400, 360, 'Press ENTER to restart', {
     fontSize: '28px',
     fontFamily: 'Arial',
     color: '#00ff00',
@@ -2176,6 +2243,8 @@ function startGame() {
   p2.patternErrors = 0;
   p1.scorePopups = [];
   p2.scorePopups = [];
+  p1.pendingScore = 0;
+  p2.pendingScore = 0;
   
   // Reset power-up system
   activePowerUpType = null;
@@ -2253,6 +2322,8 @@ function restartGame() {
     if (gameOverText.loserText) gameOverText.loserText.destroy();
     if (gameOverText.gameOverTitle) gameOverText.gameOverTitle.destroy();
     if (gameOverText.finalScore) gameOverText.finalScore.destroy();
+    if (gameOverText.winnerScoreText) gameOverText.winnerScoreText.destroy();
+    if (gameOverText.loserScoreText) gameOverText.loserScoreText.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
     if (gameOverText.menuText) gameOverText.menuText.destroy();
     gameOverText = null;
@@ -2282,6 +2353,8 @@ function restartGame() {
   p2.patternErrors = 0;
   p1.scorePopups = [];
   p2.scorePopups = [];
+  p1.pendingScore = 0;
+  p2.pendingScore = 0;
   
   // Reset power-up system
   activePowerUpType = null;
@@ -2354,6 +2427,8 @@ function returnToMenu() {
     if (gameOverText.loserText) gameOverText.loserText.destroy();
     if (gameOverText.gameOverTitle) gameOverText.gameOverTitle.destroy();
     if (gameOverText.finalScore) gameOverText.finalScore.destroy();
+    if (gameOverText.winnerScoreText) gameOverText.winnerScoreText.destroy();
+    if (gameOverText.loserScoreText) gameOverText.loserScoreText.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
     if (gameOverText.menuText) gameOverText.menuText.destroy();
     gameOverText = null;
@@ -2411,6 +2486,8 @@ function returnToMenu() {
   p2.patternErrors = 0;
   p1.scorePopups = [];
   p2.scorePopups = [];
+  p1.pendingScore = 0;
+  p2.pendingScore = 0;
   
   // Clear all UI graphics
   if (p1.healthGfx) p1.healthGfx.clear();
