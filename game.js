@@ -1440,19 +1440,33 @@ function makePattern() {
       len = 4;
     }
   } else if (round <= 20) {
-    // Rondas 11-20: 0% de 3, 30% de 4, 40% de 5, 30% de 6
-    if (rand < 0.30) {
+    // Rondas 11-20: 70% de 4, 30% de 5
+    if (rand < 0.70) {
       len = 4;
-    } else if (rand < 0.70) {
+    } else {
+      len = 5;
+    }
+  } else if (round <= 27) {
+    // Rondas 21-27: 40% de 4, 40% de 5, 20% de 6
+    if (rand < 0.40) {
+      len = 4;
+    } else if (rand < 0.80) {
       len = 5;
     } else {
       len = 6;
     }
-  } else {
-    // Rondas 21+: 0% de 3, 0% de 4, 30% de 5, 30% de 6, 40% de 7
-    if (rand < 0.30) {
+  } else if (round <= 35) {
+    // Rondas 28-35: 40% de 5, 50% de 6, 10% de 7 (ajustado para sumar 100%)
+    if (rand < 0.40) {
       len = 5;
-    } else if (rand < 0.60) {
+    } else if (rand < 0.90) {
+      len = 6;
+    } else {
+      len = 7;
+    }
+  } else {
+    // Rondas 36+: 70% de 6, 30% de 7
+    if (rand < 0.70) {
       len = 6;
     } else {
       len = 7;
