@@ -57,6 +57,8 @@ let sceneRef = null; // reference to the scene
 let menuUI = null; // menu UI elements
 let gameStartTime = 0; // timestamp when game started
 let currentRound = 1; // current round number
+let previousRound = 1; // previous round number (to detect changes)
+let roundChangeTime = 0; // timestamp when round changed (for animation)
 let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
 
@@ -858,9 +860,19 @@ function update(_time, delta) {
     const elapsedSeconds = (_time - gameStartTime) / 1000;
     currentRound = Math.floor(elapsedSeconds / 7) + 1;
     
-    // Base health drain rate increases with each round
+    // Detect round change for animation
+    if (currentRound !== previousRound) {
+      previousRound = currentRound;
+      roundChangeTime = _time;
+      // Play a special sound for round change
+      playTone(1047, 0.1, 'square', 0.15); // High C
+      setTimeout(() => playTone(1047, 0.1, 'square', 0.15), 100);
+    }
+    
+    // Base health drain rate increases every 5 rounds
     const baseHealthDrainRate = 18; // health per second
-    const roundMultiplier = 1 + (currentRound - 1) * 0.05; // +5% per round
+    const difficultyTier = Math.floor((currentRound - 1) / 5); // 0, 1, 2, 3... every 5 rounds
+    const roundMultiplier = 1 + difficultyTier * 0.1; // +10% every 5 rounds (1.0x, 1.1x, 1.2x...)
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
     
     // Players lose health 20% faster when standing still
@@ -1262,6 +1274,32 @@ function drawTimer(now) {
   // Only show timer when playing
   if (gameState !== 'playing') return;
   
+  // Check if round just changed (animate for 1 second)
+  const timeSinceRoundChange = now - roundChangeTime;
+  const isRoundChanging = timeSinceRoundChange < 1000;
+  
+  // Animation effects
+  let roundScale = 1;
+  let roundColor = 0xffaa00;
+  let roundAlpha = 1;
+  
+  if (isRoundChanging) {
+    // Pulse effect: scale up then down
+    const progress = timeSinceRoundChange / 1000;
+    if (progress < 0.3) {
+      // Scale up quickly
+      roundScale = 1 + (progress / 0.3) * 0.8; // 1.0 -> 1.8
+    } else if (progress < 0.6) {
+      // Scale down
+      roundScale = 1.8 - ((progress - 0.3) / 0.3) * 0.5; // 1.8 -> 1.3
+    } else {
+      // Final scale down to normal
+      roundScale = 1.3 - ((progress - 0.6) / 0.4) * 0.3; // 1.3 -> 1.0
+    }
+    // Flash effect: alternate between orange and yellow
+    roundColor = (Math.floor(now / 100) % 2 === 0) ? 0xffaa00 : 0xffff00;
+  }
+  
   // In single player mode, draw in top right corner
   if (gameMode === 'singlePlayer') {
     // Draw round number
@@ -1270,22 +1308,24 @@ function drawTimer(now) {
     const roundY = 15;
     
     // Calculate width to align right
+    const basePs = 4;
+    const ps = Math.floor(basePs * roundScale);
     let totalW = 0;
     for (let i = 0; i < roundText.length; i++) {
       const d = DIGITS[roundText[i]];
-      totalW += d[0].length * 4 + 2; // ps=4, gap=2
+      totalW += d[0].length * ps + 2; // ps scaled, gap=2
     }
     
-    timerGfx.fillStyle(0xffaa00, 1);
+    timerGfx.fillStyle(roundColor, roundAlpha);
     let x = roundX - totalW;
     for (let i = 0; i < roundText.length; i++) {
       const d = DIGITS[roundText[i]];
       for (let r = 0; r < d.length; r++) {
         for (let c = 0; c < d[r].length; c++) {
-          if (d[r][c]) timerGfx.fillRect(x + c * 4, roundY + r * 4, 4, 4);
+          if (d[r][c]) timerGfx.fillRect(x + c * ps, roundY + r * ps, ps, ps);
         }
       }
-      x += d[0].length * 4 + 2;
+      x += d[0].length * ps + 2;
     }
     
     // Draw countdown timer below round
@@ -1314,10 +1354,35 @@ function drawTimer(now) {
       x += d[0].length * 5 + 2;
     }
   } else {
-    // Two player mode: draw centered
+    // Two player mode: draw centered with animation
     const roundText = 'R' + String(currentRound);
-    drawDigitsCentered(timerGfx, 400, 10, roundText, 0xffaa00, 4, 2);
+    const basePs = 4;
+    const ps = Math.floor(basePs * roundScale);
     
+    // Draw round number with animation
+    timerGfx.fillStyle(roundColor, roundAlpha);
+    
+    // Calculate total width
+    let totalW = 0;
+    for (let i = 0; i < roundText.length; i++) {
+      const d = DIGITS[roundText[i]];
+      totalW += d[0].length * ps;
+      if (i < roundText.length - 1) totalW += 2;
+    }
+    
+    let x = Math.floor(400 - totalW / 2);
+    const y = 10;
+    for (let i = 0; i < roundText.length; i++) {
+      const d = DIGITS[roundText[i]];
+      for (let r = 0; r < d.length; r++) {
+        for (let c = 0; c < d[r].length; c++) {
+          if (d[r][c]) timerGfx.fillRect(x + c * ps, y + r * ps, ps, ps);
+        }
+      }
+      x += d[0].length * ps + 2;
+    }
+    
+    // Draw countdown timer
     const elapsed = (now - gameStartTime) / 1000;
     const timeInRound = elapsed % 7;
     const countdown = Math.max(0, Math.floor(7 - timeInRound));
@@ -1367,15 +1432,15 @@ function makePattern() {
   const round = currentRound;
   const rand = Math.random();
   
-  if (round <= 6) {
-    // Rondas 1-6: 80% de 3 símbolos, 20% de 4 símbolos
+  if (round <= 10) {
+    // Rondas 1-10: 80% de 3 símbolos, 20% de 4 símbolos
     if (rand < 0.80) {
       len = 3;
     } else {
       len = 4;
     }
-  } else if (round <= 12) {
-    // Rondas 7-12: 0% de 3, 30% de 4, 40% de 5, 30% de 6
+  } else if (round <= 20) {
+    // Rondas 11-20: 0% de 3, 30% de 4, 40% de 5, 30% de 6
     if (rand < 0.30) {
       len = 4;
     } else if (rand < 0.70) {
@@ -1384,7 +1449,7 @@ function makePattern() {
       len = 6;
     }
   } else {
-    // Rondas 13+: 0% de 3, 0% de 4, 30% de 5, 30% de 6, 40% de 7
+    // Rondas 21+: 0% de 3, 0% de 4, 30% de 5, 30% de 6, 40% de 7
     if (rand < 0.30) {
       len = 5;
     } else if (rand < 0.60) {
@@ -1985,10 +2050,11 @@ function onPlayerHit(player, now, dmg = 1) {
   // Play hit sound
   playHitSound();
   
-  // Progressive damage multiplier: increases by 0.1x per round
-  // Round 1: 1.0x, Round 2: 1.1x, Round 3: 1.2x, etc.
-  const roundMultiplier = 1.0 + (currentRound - 1) * 0.1;
-  const baseDamage = 22.5; // base damage per hit (reduced to half)
+  // Progressive damage multiplier: increases every 5 rounds
+  // Rounds 1-4: 1.0x, Rounds 5-9: 1.1x, Rounds 10-14: 1.2x, etc.
+  const difficultyTier = Math.floor((currentRound - 1) / 5); // 0, 1, 2, 3... every 5 rounds
+  const roundMultiplier = 1.0 + difficultyTier * 0.1; // +10% every 5 rounds
+  const baseDamage = 22.5; // base damage per hit
   const finalDamage = dmg * baseDamage * roundMultiplier;
   
   // Subtract 5 points for taking damage
@@ -2245,6 +2311,8 @@ function startGame() {
   gameState = 'playing';
   gameStartTime = sceneRef.time.now; // Reset timer
   currentRound = 1; // Reset round
+  previousRound = 1; // Reset previous round
+  roundChangeTime = 0; // Reset round change time
   p1.health = p1.maxHealth;
   p2.health = p2.maxHealth;
   p1.score = 0;
@@ -2356,6 +2424,8 @@ function restartGame() {
   gameState = 'playing';
   gameStartTime = sceneRef.time.now; // Reset timer
   currentRound = 1; // Reset round
+  previousRound = 1; // Reset previous round
+  roundChangeTime = 0; // Reset round change time
   
   // Reset all game state for a fresh start
   p1.health = p1.maxHealth;
