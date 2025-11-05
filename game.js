@@ -68,6 +68,7 @@ let audioContext;
 let introMusicLoop = null;
 let gameMusicLoop = null;
 let currentMusic = null;
+let musicTimeouts = []; // Array to store all music timeouts (intro, battle, victory)
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -428,6 +429,13 @@ function playHitSound() {
   setTimeout(() => playTone(100, 0.12, 'sawtooth', 0.2), 50);
 }
 
+function playButtonPressSound() {
+  if (!audioContext) initAudio();
+  
+  // Short, satisfying beep for button press (higher pitched, quick)
+  playTone(880, 0.05, 'square', 0.12);
+}
+
 function playIntroMusic() {
   if (!audioContext) initAudio();
   stopMusic();
@@ -449,11 +457,12 @@ function playIntroMusic() {
   const playMelody = () => {
     time = 0;
     melody.forEach(note => {
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (currentMusic === introMusicLoop) {
           playTone(note.freq, note.dur, 'square', 0.08);
         }
       }, time * 1000);
+      musicTimeouts.push(timeoutId);
       time += note.dur;
     });
   };
@@ -487,11 +496,12 @@ function playGameMusic() {
   const playMelody = () => {
     time = 0;
     melody.forEach(note => {
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (currentMusic === gameMusicLoop) {
           playTone(note.freq, note.dur, 'square', 0.06);
         }
       }, time * 1000);
+      musicTimeouts.push(timeoutId);
       time += note.dur;
     });
   };
@@ -524,9 +534,12 @@ function playVictoryMusic() {
   
   let time = 0;
   melody.forEach(note => {
-    setTimeout(() => {
-      playTone(note.freq, note.dur, 'square', 0.1);
+    const timeoutId = setTimeout(() => {
+      if (currentMusic === 'victory') {
+        playTone(note.freq, note.dur, 'square', 0.1);
+      }
     }, time * 1000);
+    musicTimeouts.push(timeoutId);
     time += note.dur;
   });
   
@@ -543,6 +556,10 @@ function stopMusic() {
     clearInterval(gameMusicLoop);
     gameMusicLoop = null;
   }
+  // Clear all music timeouts (intro, battle, victory)
+  musicTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+  musicTimeouts = [];
+  
   currentMusic = null;
 }
 
@@ -1426,6 +1443,9 @@ function tryStep(player, input) {
       if (!player.wildcardDirections) player.wildcardDirections = [];
       player.wildcardDirections.push(direction);
     }
+    
+    // Play button press sound for correct input
+    playButtonPressSound();
     
     // Accumulate 10 points for each correct symbol (not added to total yet)
     player.pendingScore += 10;
@@ -2328,6 +2348,9 @@ function restartGame() {
     if (gameOverText.menuText) gameOverText.menuText.destroy();
     gameOverText = null;
   }
+  
+  // Start game music
+  playGameMusic();
   
   // Change state to 'playing' to start the game immediately
   gameState = 'playing';
