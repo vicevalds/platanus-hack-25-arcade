@@ -61,6 +61,7 @@ let previousRound = 1; // previous round number (to detect changes)
 let roundChangeTime = 0; // timestamp when round changed (for animation)
 let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
+let gameOverSelection = 0; // 0 = restart, 1 = back to menu
 
 // Test mode: set to true to complete patterns with just the first symbol
 const testMode = false;
@@ -184,11 +185,11 @@ const BUK_LOGO = [
 ];
 
 const AWS_LOGO = [
-  [0,0,1,0,1,0,0,0,0,0,0,0,1,0,1,1,1],
-  [0,1,1,1,0,1,0,0,1,0,0,1,0,0,1,0,0],
-  [0,1,0,1,0,0,1,0,1,0,1,0,0,0,1,1,1],
-  [1,1,1,1,1,0,1,0,1,0,1,0,0,0,0,0,1],
-  [1,1,0,1,1,0,0,1,0,1,0,0,0,0,1,1,1]
+  [0,0,1,0,1,1,0,0,0,0,0,1,1,0,1,1,1],
+  [0,1,1,1,0,1,1,0,1,0,1,1,0,1,1,0,0],
+  [0,1,0,1,0,1,1,0,1,0,1,0,0,0,1,1,0],
+  [1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,1,1],
+  [1,1,0,1,1,0,0,1,0,1,0,0,0,1,1,1,0]
 ];
 
 // Wall mask (2 columns x 7 rows) - vertical bar with pattern
@@ -685,14 +686,24 @@ function create() {
         return;
       }
     } else if (gameState === 'gameOver') {
-      // Restart with START buttons or Enter
-      if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
-        restartGame();
+      // Navigate menu with Up/Down
+      if (arcadeCode === 'P1U' || arcadeCode === 'P2U') {
+        gameOverSelection = (gameOverSelection - 1 + 2) % 2;
+        updateGameOverSelection();
         return;
       }
-      // Return to menu with ESC or M
-      if (ev.code === 'Escape' || ev.code === 'KeyM') {
-        returnToMenu();
+      if (arcadeCode === 'P1D' || arcadeCode === 'P2D') {
+        gameOverSelection = (gameOverSelection + 1) % 2;
+        updateGameOverSelection();
+        return;
+      }
+      // Select option with START buttons or Enter
+      if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
+        if (gameOverSelection === 0) {
+          restartGame();
+        } else {
+          returnToMenu();
+        }
         return;
       }
     }
@@ -2341,23 +2352,28 @@ function endGame(winner, loser) {
     gameOverText = { overlay, winnerText, loserText, winnerScoreText, loserScoreText };
   }
   
-  // Restart button (default option)
-  const restartText = sceneRef.add.text(400, 360, 'Press ENTER to restart', {
-    fontSize: '28px',
+  // Restart option (default)
+  const restartText = sceneRef.add.text(400, 360, 'Restart', {
+    fontSize: '36px',
     fontFamily: 'Arial',
-    color: '#00ff00',
+    color: '#ffffff',
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(2001);
   
-  // Menu button
-  const menuText = sceneRef.add.text(400, 420, 'Back to Menu (ESC or M)', {
-    fontSize: '22px',
+  // Back to menu option
+  const menuText = sceneRef.add.text(400, 420, 'Back to Menu', {
+    fontSize: '36px',
     fontFamily: 'Arial',
-    color: '#aaaaaa'
+    color: '#ffffff',
+    fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(2001);
   
   gameOverText.restartText = restartText;
   gameOverText.menuText = menuText;
+  
+  // Initialize selection to restart (default)
+  gameOverSelection = 0;
+  updateGameOverSelection();
 }
 
 function showMenu() {
@@ -2406,7 +2422,7 @@ function showMenu() {
   const title = sceneRef.add.text(400, 140, 'Epic Battle', {
     fontSize: '72px',
     fontFamily: 'Arial',
-    color: '#ffffff',
+    color: '#E8AE32',
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(1501);
   
@@ -2434,13 +2450,13 @@ function showMenu() {
   }).setOrigin(0.5).setDepth(1501);
   
   // Controls info - In PC
-  const controlsTitle = sceneRef.add.text(400, 500, 'In PC:', {
+  const controlsTitle = sceneRef.add.text(400, 560, 'In PC:', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#888888'
   }).setOrigin(0.5).setDepth(1501);
 
-  const controls2 = sceneRef.add.text(400, 545, 'P1: WASD + IJKL | P2: Arrows + TFGH', {
+  const controls2 = sceneRef.add.text(400, 580, 'P1: WASD + IJKL | P2: Arrows + TFGH', {
     fontSize: '14px',
     fontFamily: 'Arial',
     color: '#666666'
@@ -2467,6 +2483,23 @@ function updateMenuSelection() {
     menuUI.singlePlayerText.setFontSize('36px');
     menuUI.twoPlayerText.setColor('#00ff00');
     menuUI.twoPlayerText.setFontSize('40px');
+  }
+}
+
+function updateGameOverSelection() {
+  if (!gameOverText || !gameOverText.restartText || !gameOverText.menuText) return;
+  
+  // Update colors and scale based on selection
+  if (gameOverSelection === 0) {
+    gameOverText.restartText.setColor('#00ff00');
+    gameOverText.restartText.setFontSize('40px');
+    gameOverText.menuText.setColor('#ffffff');
+    gameOverText.menuText.setFontSize('36px');
+  } else {
+    gameOverText.restartText.setColor('#ffffff');
+    gameOverText.restartText.setFontSize('36px');
+    gameOverText.menuText.setColor('#00ff00');
+    gameOverText.menuText.setFontSize('40px');
   }
 }
 
