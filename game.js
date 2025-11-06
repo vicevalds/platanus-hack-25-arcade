@@ -31,27 +31,14 @@ const BUTTON_TO_DIR = {
 };
 let projL = []; // projectiles on left half (targeting P1)
 let projR = []; // projectiles on right half (targeting P2)
-let shieldP1 = null; // banana for P1
-let shieldP2 = null; // banana for P2
-let nextShieldP1At = 0; // ms timestamp for P1 banana
-let nextShieldP2At = 0; // ms timestamp for P2 banana
-let bukP1 = null; // buk shield for P1
-let bukP2 = null; // buk shield for P2
-let nextBukP1At = 0; // ms timestamp for P1 buk
-let nextBukP2At = 0; // ms timestamp for P2 buk
-let awsP1 = null; // AWS wall power-up for P1
-let awsP2 = null; // AWS wall power-up for P2
-let nextAwsP1At = 0; // ms timestamp for P1 AWS
-let nextAwsP2At = 0; // ms timestamp for P2 AWS
+// Power-ups: [P1, P2] - each element is {shield, buk, aws, nextAt}
+let pUps = [{shield:null,buk:null,aws:null,nextAt:0},{shield:null,buk:null,aws:null,nextAt:0}];
 let walls = []; // active walls (each wall has x, y, width, height, hits)
 let timerGfx; // pixel timer display
 let stars = []; // background stars
 let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
 let activePowerUpType = null; // Current active power-up type: 'shield', 'buk', 'aws', or null
 let nextPowerUpSpawnAt = 0; // Global power-up spawn timer
-// Independent timers for two player mode
-let nextPowerUpP1At = 0; // P1's independent spawn timer
-let nextPowerUpP2At = 0; // P2's independent spawn timer
 let gameOverText = null; // game over message text
 let sceneRef = null; // reference to the scene
 let menuUI = null; // menu UI elements
@@ -64,7 +51,7 @@ let menuSelection = 0; // 0 = single player, 1 = two player
 let gameOverSelection = 0; // 0 = restart, 1 = back to menu
 
 // Test mode: set to true to complete patterns with just the first symbol
-const testMode = false;
+const testMode = true;
 
 // Audio variables
 let audioContext;
@@ -190,6 +177,15 @@ const AWS_LOGO = [
   [0,1,0,1,0,1,1,0,1,0,1,1,0,0,1,1,0],
   [1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,1,1],
   [1,1,0,1,1,0,0,1,0,1,0,0,0,1,1,1,0]
+];
+// Unified banana pixel art (single version)
+const BANANA_Y = [
+  [0,0,0,0,1,1,1],
+  [0,0,0,1,1,1,1],
+  [0,0,1,0,1,0,1],
+  [0,1,0,0,1,0,1],
+  [1,0,0,1,0,0,1],
+  [0,0,1,0,0,1,0]
 ];
 
 // Wall mask (2 columns x 7 rows) - vertical bar with pattern
@@ -1132,7 +1128,7 @@ function update(_time, delta) {
     }
     
     // Base health drain rate increases by 0.4 per round (faster progression)
-    const baseHealthDrainRate = 20; // health per second (starting rate)
+    const baseHealthDrainRate = 0; // health per second (starting rate)
     const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.3; // +0.4 per round
     
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
@@ -1200,23 +1196,11 @@ function update(_time, delta) {
   // move and draw projectiles (on arena layer)
   updateProjectiles(dt, _time);
 
-  // shield power-ups (on arena layer) - one per player (only when playing)
+  // Power-ups (on arena layer) - one per player (only when playing)
   if (gameState === 'playing') {
-    updateShieldP1(_time);
+    updatePowerUps(0, _time);
     if (gameMode === 'twoPlayer') {
-      updateShieldP2(_time);
-    }
-
-    // buk power-ups (on arena layer) - one per player
-    updateBukP1(_time);
-    if (gameMode === 'twoPlayer') {
-      updateBukP2(_time);
-    }
-
-    // AWS power-ups (on arena layer) - one per player
-    updateAwsP1(_time);
-    if (gameMode === 'twoPlayer') {
-      updateAwsP2(_time);
+      updatePowerUps(1, _time);
     }
   }
 
@@ -1304,38 +1288,6 @@ function update(_time, delta) {
   }
 }
 
-function drawStick(gr, x, y, s, color) {
-  // s acts as overall scale. Head radius ~ s*0.4, body length ~ s*1.2
-  const r = Math.max(6, Math.floor(s * 0.4));
-  const body = Math.floor(s * 1.2);
-  const arm = Math.floor(s * 0.9);
-  const leg = Math.floor(s * 1.0);
-
-  gr.lineStyle(3, color, 1);
-
-  // Head
-  gr.strokeCircle(x, y - body - r, r);
-
-  // Body
-  gr.beginPath();
-  gr.moveTo(x, y - body);
-  gr.lineTo(x, y);
-  gr.strokePath();
-
-  // Arms
-  gr.beginPath();
-  gr.moveTo(x - arm * 0.6, y - body + body * 0.3);
-  gr.lineTo(x + arm * 0.6, y - body + body * 0.3);
-  gr.strokePath();
-
-  // Legs
-  gr.beginPath();
-  gr.moveTo(x, y);
-  gr.lineTo(x - leg * 0.5, y + leg * 0.9);
-  gr.moveTo(x, y);
-  gr.lineTo(x + leg * 0.5, y + leg * 0.9);
-  gr.strokePath();
-}
 
 // Pixel person masks (8 x 13) - Player 1 (three separate color boxes)
 const PERSON_MASK_P1_HEAD = [
@@ -2591,10 +2543,6 @@ function isHit(proj, player) {
   return dx <= r && dy <= r;
 }
 
-function onPlayerHit(player) {
-  // placeholder to keep signature (overloaded below)
-}
-
 function onPlayerHit(player, now, dmg = 1) {
   if (player.immuneUntil && now < player.immuneUntil) return;
   if (gameState !== 'playing') return;
@@ -2643,12 +2591,8 @@ function endGame(winner, loser) {
   gameState = 'gameOver';
   
   // Clear all power-ups when game ends
-  shieldP1 = null;
-  shieldP2 = null;
-  bukP1 = null;
-  bukP2 = null;
-  awsP1 = null;
-  awsP2 = null;
+  pUps[0].shield = pUps[0].buk = pUps[0].aws = null;
+  pUps[1].shield = pUps[1].buk = pUps[1].aws = null;
   
   // Play victory music
   playVictoryMusic();
@@ -2933,8 +2877,8 @@ function startGame() {
   activePowerUpType = null;
   nextPowerUpSpawnAt = sceneRef.time.now + getPowerUpSpawnTime(); // First spawn time based on current round
   // Initialize independent timers for two player mode
-  nextPowerUpP1At = sceneRef.time.now + getPowerUpSpawnTime();
-  nextPowerUpP2At = sceneRef.time.now + getPowerUpSpawnTime();
+  pUps[0].nextAt = sceneRef.time.now + getPowerUpSpawnTime();
+  pUps[1].nextAt = sceneRef.time.now + getPowerUpSpawnTime();
   
   // Position players based on mode
   if (gameMode === 'singlePlayer') {
@@ -2954,18 +2898,8 @@ function startGame() {
   
   projL = [];
   projR = [];
-  shieldP1 = null;
-  shieldP2 = null;
-  nextShieldP1At = 0;
-  nextShieldP2At = 0;
-  bukP1 = null;
-  bukP2 = null;
-  nextBukP1At = 0;
-  nextBukP2At = 0;
-  awsP1 = null;
-  awsP2 = null;
-  nextAwsP1At = 0;
-  nextAwsP2At = 0;
+  pUps[0] = {shield:null,buk:null,aws:null,nextAt:sceneRef.time.now + getPowerUpSpawnTime()};
+  pUps[1] = {shield:null,buk:null,aws:null,nextAt:sceneRef.time.now + getPowerUpSpawnTime()};
   walls = [];
   p1.hasShield = false;
   p2.hasShield = false;
@@ -3052,22 +2986,12 @@ function restartGame() {
   activePowerUpType = null;
   nextPowerUpSpawnAt = sceneRef.time.now + getPowerUpSpawnTime(); // First spawn time based on current round
   // Initialize independent timers for two player mode
-  nextPowerUpP1At = sceneRef.time.now + getPowerUpSpawnTime();
-  nextPowerUpP2At = sceneRef.time.now + getPowerUpSpawnTime();
+  pUps[0].nextAt = sceneRef.time.now + getPowerUpSpawnTime();
+  pUps[1].nextAt = sceneRef.time.now + getPowerUpSpawnTime();
   projL = [];
   projR = [];
-  shieldP1 = null;
-  shieldP2 = null;
-  nextShieldP1At = 0;
-  nextShieldP2At = 0;
-  bukP1 = null;
-  bukP2 = null;
-  nextBukP1At = 0;
-  nextBukP2At = 0;
-  awsP1 = null;
-  awsP2 = null;
-  nextAwsP1At = 0;
-  nextAwsP2At = 0;
+  pUps[0] = {shield:null,buk:null,aws:null,nextAt:sceneRef.time.now + getPowerUpSpawnTime()};
+  pUps[1] = {shield:null,buk:null,aws:null,nextAt:sceneRef.time.now + getPowerUpSpawnTime()};
   walls = [];
   p1.hasShield = false;
   p2.hasShield = false;
@@ -3133,25 +3057,13 @@ function returnToMenu() {
   // Clear all projectiles
   projL = [];
   projR = [];
-  shieldP1 = null;
-  shieldP2 = null;
-  nextShieldP1At = 0;
-  nextShieldP2At = 0;
-  bukP1 = null;
-  bukP2 = null;
-  nextBukP1At = 0;
-  nextBukP2At = 0;
-  awsP1 = null;
-  awsP2 = null;
-  nextAwsP1At = 0;
-  nextAwsP2At = 0;
+  pUps[0] = {shield:null,buk:null,aws:null,nextAt:0};
+  pUps[1] = {shield:null,buk:null,aws:null,nextAt:0};
   walls = [];
   
   // Reset power-up system
   activePowerUpType = null;
   nextPowerUpSpawnAt = 0;
-  nextPowerUpP1At = 0;
-  nextPowerUpP2At = 0;
   
   // Reset player positions off screen
   p1.x = 200;
@@ -3229,521 +3141,123 @@ function getPowerUpSpawnTime() {
   return minTime + Math.random() * range;
 }
 
-function updateShieldP1(now) {
-  // Count active power-ups for P1 only in two player mode
-  const activePowerUpsP1 = (gameMode === 'twoPlayer') ? 
-    [shieldP1, bukP1, awsP1].filter(p => p !== null).length :
-    [shieldP1, shieldP2, bukP1, bukP2, awsP1, awsP2].filter(p => p !== null).length;
-  
-  // Use independent timer for two player mode, global for single player
-  const spawnTimer = (gameMode === 'twoPlayer') ? nextPowerUpP1At : nextPowerUpSpawnAt;
-  
-  // schedule spawn if none
-  if (!shieldP1 && !bukP1 && !awsP1) {
-    // In two player mode, choose random power-up independently for P1
-    if (gameMode === 'twoPlayer' && now >= spawnTimer) {
-      const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-      if (randomType === 'shield') {
-        spawnShieldP1(now);
-        nextPowerUpP1At = now + getPowerUpSpawnTime(); // respawn time based on current round
-      } else if (randomType === 'buk') {
-        spawnBukP1(now);
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else if (randomType === 'aws') {
-        spawnAwsP1(now);
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      }
-    } else if (gameMode === 'singlePlayer' && activePowerUpsP1 < 2 && now >= spawnTimer) {
-      // Single player mode: use global system
-      const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-      if (randomType === 'shield') {
-        spawnShieldP1(now);
-        activePowerUpType = 'shield';
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      } else if (randomType === 'buk') {
-        spawnBukP1(now);
-        activePowerUpType = 'buk';
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      } else if (randomType === 'aws') {
-        spawnAwsP1(now);
-        activePowerUpType = 'aws';
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      }
-    }
-  }
-  // draw and check pickup
-  if (shieldP1) {
-    const timeAlive = now - shieldP1.spawnTime;
-    
-    // Check if power-up has expired (5 seconds)
-    if (timeAlive > 5000) {
-      shieldP1 = null;
-      // Reset timer based on game mode
-      if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else if (activePowerUpsP1 <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      }
-      return;
-    }
-
-    // Blink effect in the last second (4000-5000ms)
-    const shouldBlink = timeAlive > 4000 && Math.floor(now / 150) % 2 === 0;
-    
-    if (!shouldBlink) {
-      // Draw shadow for banana first
-      drawShadow(g, shieldP1.x, shieldP1.y, 15);
-      
-      const ps = shieldP1.ps;
-      // Banana pixel art (two colors: peel yellow and stem brown)
-      const bananaY = [
-        [0,0,0,0,1,1,1],
-        [0,0,0,1,1,1,1],
-        [0,0,1,0,1,0,1],
-        [0,1,0,0,1,0,1],
-        [1,0,0,1,0,0,1],
-        [0,0,1,0,0,1,0]
-      ];
-      const bananaB = [
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0]
-      ];
-      const w = bananaY[0].length * ps;
-      const h = bananaY.length * ps;
-      const sx = Math.floor(shieldP1.x - w / 2);
-      const sy = Math.floor(shieldP1.y - h / 2);
-      // draw yellow peel
-      g.fillStyle(0xffe066, 1);
-      for (let r = 0; r < bananaY.length; r++) {
-        for (let c = 0; c < bananaY[r].length; c++) {
-          if (bananaY[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-      // draw brown stem
-      g.fillStyle(0x8b5a2b, 1);
-      for (let r = 0; r < bananaB.length; r++) {
-        for (let c = 0; c < bananaB[r].length; c++) {
-          if (bananaB[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-    }
-
-    // pickup check for P1 only
-    if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
-      playPowerUpSound();
-      p1.health = Math.min(p1.maxHealth, p1.health + p1.maxHealth * 0.8); // Fill health to 80%
-      p1.score += 20; // Add 20 points for picking up power-up
-      showScorePopup(p1, 20, now);
-      drawHealthBar(p1);
-      drawScore(p1);
-      shieldP1 = null;
-      // Reset timer based on game mode
-      if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else if (activePowerUpsP1 <= 1) {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      }
-    }
-  }
-}
-
-function updateShieldP2(now) {
-  // Count active power-ups for P2 only
-  const activePowerUpsP2 = [shieldP2, bukP2, awsP2].filter(p => p !== null).length;
-  
-  // schedule spawn if none - only in two player mode
-  if (!shieldP2 && !bukP2 && !awsP2 && gameMode === 'twoPlayer') {
-    // Choose random power-up independently for P2
-    if (now >= nextPowerUpP2At) {
-      const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
-      if (randomType === 'shield') {
-        spawnShieldP2(now);
-        nextPowerUpP2At = now + getPowerUpSpawnTime(); // respawn in 5-8s
-      } else if (randomType === 'buk') {
-        spawnBukP2(now);
-        nextPowerUpP2At = now + getPowerUpSpawnTime();
-      } else if (randomType === 'aws') {
-        spawnAwsP2(now);
-        nextPowerUpP2At = now + getPowerUpSpawnTime();
-      }
-    }
-  }
-  // draw and check pickup
-  if (shieldP2) {
-    const timeAlive = now - shieldP2.spawnTime;
-    
-    // Check if power-up has expired (5 seconds)
-    if (timeAlive > 5000) {
-      shieldP2 = null;
-      nextPowerUpP2At = now + getPowerUpSpawnTime();
-      return;
-    }
-
-    // Blink effect in the last second (4000-5000ms)
-    const shouldBlink = timeAlive > 4000 && Math.floor(now / 150) % 2 === 0;
-    
-    if (!shouldBlink) {
-      // Draw shadow for banana first
-      drawShadow(g, shieldP2.x, shieldP2.y, 15);
-      
-      const ps = shieldP2.ps;
-      // Banana pixel art (two colors: peel yellow and stem brown)
-      const bananaY = [
-        [0,0,0,0,0,1,0],
-        [0,0,0,0,1,1,1],
-        [0,0,0,0,0,1,1],
-        [0,0,0,0,1,1,1],
-        [0,1,1,1,1,1,1],
-        [0,0,1,1,1,1,0]
-      ];
-      const bananaB = [
-        [0,0,0,0,1,0,0],
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0],
-        [0,0,0,0,0,0,0]
-      ];
-      const w = bananaY[0].length * ps;
-      const h = bananaY.length * ps;
-      const sx = Math.floor(shieldP2.x - w / 2);
-      const sy = Math.floor(shieldP2.y - h / 2);
-      // draw yellow peel
-      g.fillStyle(0xffe066, 1);
-      for (let r = 0; r < bananaY.length; r++) {
-        for (let c = 0; c < bananaY[r].length; c++) {
-          if (bananaY[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-      // draw brown stem
-      g.fillStyle(0x8b5a2b, 1);
-      for (let r = 0; r < bananaB.length; r++) {
-        for (let c = 0; c < bananaB[r].length; c++) {
-          if (bananaB[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-    }
-
-    // pickup check for P2 only
-    if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
-      playPowerUpSound();
-      p2.health = Math.min(p2.maxHealth, p2.health + p2.maxHealth * 0.8); // Fill health to 80%
-      p2.score += 20; // Add 20 points for picking up power-up
-      showScorePopup(p2, 20, now);
-      drawHealthBar(p2);
-      drawScore(p2);
-      shieldP2 = null;
-      nextPowerUpP2At = now + getPowerUpSpawnTime();
-    }
-  }
-}
-
-function updateBukP1(now) {
-  // Draw and check pickup (spawn is handled in updateShieldP1)
-  if (bukP1) {
-    const timeAlive = now - bukP1.spawnTime;
-    
-    // Check if power-up has expired (5 seconds)
-    if (timeAlive > 5000) {
-      bukP1 = null;
-      // Reset timer based on game mode
-      if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      }
-      return;
-    }
-
-    // Blink effect in the last second (4000-5000ms)
-    const shouldBlink = timeAlive > 4000 && Math.floor(now / 150) % 2 === 0;
-    
-    if (!shouldBlink) {
-      // Draw shadow for buk first
-      drawShadow(g, bukP1.x, bukP1.y, 15);
-      
-      const ps = bukP1.ps;
-      const w = BUK_LOGO[0].length * ps;
-      const h = BUK_LOGO.length * ps;
-      const sx = Math.floor(bukP1.x - w / 2);
-      const sy = Math.floor(bukP1.y - h / 2);
-      
-      // Draw cyan ".buk" text
-      g.fillStyle(0x2f4daa, 1);
-      for (let r = 0; r < BUK_LOGO.length; r++) {
-        for (let c = 0; c < BUK_LOGO[r].length; c++) {
-          if (BUK_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-    }
-
-    // pickup check for P1 only
-    if (distSq(p1.x, p1.y, bukP1.x, bukP1.y) <= (p1.size + 10) * (p1.size + 10)) {
-      playPowerUpSound();
-      p1.hasShield = true;
-      p1.score += 20; // Add 20 points for picking up power-up
-      showScorePopup(p1, 20, now);
-      drawScore(p1);
-      bukP1 = null;
-      // Reset timer based on game mode
-      if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
-      }
-    }
-  }
-}
-
-function updateBukP2(now) {
-  // Draw and check pickup (spawn is handled in updateShieldP2)
-  if (bukP2) {
-    const timeAlive = now - bukP2.spawnTime;
-    
-    // Check if power-up has expired (5 seconds)
-    if (timeAlive > 5000) {
-      bukP2 = null;
-      nextPowerUpP2At = now + getPowerUpSpawnTime();
-      return;
-    }
-
-    // Blink effect in the last second (4000-5000ms)
-    const shouldBlink = timeAlive > 4000 && Math.floor(now / 150) % 2 === 0;
-    
-    if (!shouldBlink) {
-      // Draw shadow for buk first
-      drawShadow(g, bukP2.x, bukP2.y, 15);
-      
-      const ps = bukP2.ps;
-      const w = BUK_LOGO[0].length * ps;
-      const h = BUK_LOGO.length * ps;
-      const sx = Math.floor(bukP2.x - w / 2);
-      const sy = Math.floor(bukP2.y - h / 2);
-      
-      // Draw cyan ".buk" text
-      g.fillStyle(0x2f4daa, 1);
-      for (let r = 0; r < BUK_LOGO.length; r++) {
-        for (let c = 0; c < BUK_LOGO[r].length; c++) {
-          if (BUK_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-    }
-
-    // pickup check for P2 only
-    if (distSq(p2.x, p2.y, bukP2.x, bukP2.y) <= (p2.size + 10) * (p2.size + 10)) {
-      playPowerUpSound();
-      p2.hasShield = true;
-      p2.score += 20; // Add 20 points for picking up power-up
-      showScorePopup(p2, 20, now);
-      drawScore(p2);
-      bukP2 = null;
-      nextPowerUpP2At = now + getPowerUpSpawnTime();
-    }
-  }
-}
-
-function spawnShieldP1(now) {
-  const margin = 20;
-  const halfX = 400;
-  // Spawn in P1's half (left side)
-  const x = margin + Math.random() * (halfX - margin * 2);
-  // Spawn shield only in playable area (below top UI section)
-  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  shieldP1 = { x, y, ps: 5, spawnTime: now };
-}
-
-function spawnShieldP2(now) {
-  const margin = 20;
-  const halfX = 400;
-  // Spawn in P2's half (right side)
-  const x = halfX + margin + Math.random() * (halfX - margin * 2);
-  // Spawn shield only in playable area (below top UI section)
-  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  shieldP2 = { x, y, ps: 5, spawnTime: now };
-}
-
-function spawnBukP1(now) {
-  const margin = 20;
-  const halfX = 400;
-  // In single player mode, spawn across full screen; otherwise in P1's half
-  let x, y;
-  if (gameMode === 'singlePlayer') {
-    x = margin + Math.random() * (800 - margin * 2);
+// Unified power-up functions (playerIdx: 0=P1, 1=P2)
+function spawnPowerUp(playerIdx, type, now) {
+  const m = 20, hX = 400, ps = type === 'shield' ? 5 : type === 'buk' ? 4 : 3;
+  const p = playerIdx === 0 ? p1 : p2;
+  let x;
+  if (gameMode === 'singlePlayer' && playerIdx === 0 && type !== 'shield') {
+    x = m + Math.random() * (800 - m * 2);
   } else {
-    x = margin + Math.random() * (halfX - margin * 2);
+    const left = playerIdx === 0 ? m : hX + m;
+    const right = playerIdx === 0 ? hX - m : 800 - m;
+    x = left + Math.random() * (right - left);
   }
-  // Spawn buk only in playable area (below top UI section)
-  y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  bukP1 = { x, y, ps: 4, spawnTime: now }; // ps: 4 for double size
+  const y = TOP_UI_HEIGHT + m + Math.random() * (600 - TOP_UI_HEIGHT - m * 2);
+  pUps[playerIdx][type] = { x, y, ps, spawnTime: now };
 }
 
-function spawnBukP2(now) {
-  const margin = 20;
-  const halfX = 400;
-  // Spawn in P2's half (right side)
-  const x = halfX + margin + Math.random() * (halfX - margin * 2);
-  // Spawn buk only in playable area (below top UI section)
-  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  bukP2 = { x, y, ps: 4, spawnTime: now }; // ps: 4 for double size
-}
-
-function updateAwsP1(now) {
-  // Draw and check pickup (spawn is handled in updateShieldP1)
-  if (awsP1) {
-    const timeAlive = now - awsP1.spawnTime;
-    
-    // Check if power-up has expired (5 seconds)
-    if (timeAlive > 5000) {
-      awsP1 = null;
-      // Reset timer based on game mode
-      if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else {
-        activePowerUpType = null;
-        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
+function updatePowerUp(playerIdx, type, now) {
+  const pu = pUps[playerIdx][type];
+  if (!pu) return;
+  const p = playerIdx === 0 ? p1 : p2;
+  const t = now - pu.spawnTime;
+  if (t > 5000) {
+    pUps[playerIdx][type] = null;
+    if (gameMode === 'twoPlayer') {
+      pUps[playerIdx].nextAt = now + getPowerUpSpawnTime();
+    } else if (playerIdx === 0) {
+      let a = 0;
+      for (let i = 0; i < 2; i++) {
+        if (pUps[i].shield) a++;
+        if (pUps[i].buk) a++;
+        if (pUps[i].aws) a++;
       }
-      return;
-    }
-
-    // Blink effect in the last second (4000-5000ms)
-    const shouldBlink = timeAlive > 4000 && Math.floor(now / 150) % 2 === 0;
-    
-    if (!shouldBlink) {
-      // Draw shadow for AWS first
-      drawShadow(g, awsP1.x, awsP1.y, 15);
-      
-      const ps = awsP1.ps;
-      const w = AWS_LOGO[0].length * ps;
-      const h = AWS_LOGO.length * ps;
-      const sx = Math.floor(awsP1.x - w / 2);
-      const sy = Math.floor(awsP1.y - h / 2);
-      
-      // Draw AWS logo in orange
-      g.fillStyle(0xFF9900, 1);
-      for (let r = 0; r < AWS_LOGO.length; r++) {
-        for (let c = 0; c < AWS_LOGO[r].length; c++) {
-          if (AWS_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
-    }
-
-    // pickup check for P1 only
-    if (distSq(p1.x, p1.y, awsP1.x, awsP1.y) <= (p1.size + 10) * (p1.size + 10)) {
-      playPowerUpSound();
-      // Create wall at AWS position (same size as player for visual consistency)
-      const wallX = awsP1.x;
-      const wallY = awsP1.y;
-      
-      walls.push({ 
-        x: wallX, 
-        y: wallY, 
-        size: p1.size, // Use player size for scaling
-        hits: 0 
-      });
-      
-      p1.score += 20; // Add 20 points for picking up power-up
-      showScorePopup(p1, 20, now);
-      drawScore(p1);
-      
-      awsP1 = null;
-      // Reset timer based on game mode
-      if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + getPowerUpSpawnTime();
-      } else {
+      if (a <= 1) {
         activePowerUpType = null;
         nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
     }
+    return;
   }
-}
-
-function updateAwsP2(now) {
-  // Draw and check pickup (spawn is handled in updateShieldP2)
-  if (awsP2) {
-    const timeAlive = now - awsP2.spawnTime;
-    
-    // Check if power-up has expired (5 seconds)
-    if (timeAlive > 5000) {
-      awsP2 = null;
-      nextPowerUpP2At = now + getPowerUpSpawnTime();
-      return;
+  const blink = t > 4000 && Math.floor(now / 150) % 2 === 0;
+  if (!blink) {
+    drawShadow(g, pu.x, pu.y, 15);
+    const ps = pu.ps;
+    let mask, color;
+    if (type === 'shield') {
+      mask = BANANA_Y;
+      color = 0xffe066;
+    } else if (type === 'buk') {
+      mask = BUK_LOGO;
+      color = 0x2f4daa;
+    } else if (type === 'aws') {
+      mask = AWS_LOGO;
+      color = 0xFF9900;
     }
-
-    // Blink effect in the last second (4000-5000ms)
-    const shouldBlink = timeAlive > 4000 && Math.floor(now / 150) % 2 === 0;
-    
-    if (!shouldBlink) {
-      // Draw shadow for AWS first
-      drawShadow(g, awsP2.x, awsP2.y, 15);
-      
-      const ps = awsP2.ps;
-      const w = AWS_LOGO[0].length * ps;
-      const h = AWS_LOGO.length * ps;
-      const sx = Math.floor(awsP2.x - w / 2);
-      const sy = Math.floor(awsP2.y - h / 2);
-      
-      // Draw AWS logo in orange
-      g.fillStyle(0xFF9900, 1);
-      for (let r = 0; r < AWS_LOGO.length; r++) {
-        for (let c = 0; c < AWS_LOGO[r].length; c++) {
-          if (AWS_LOGO[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+    if (mask) {
+      const w = mask[0].length * ps, h = mask.length * ps;
+      const sx = Math.floor(pu.x - w / 2), sy = Math.floor(pu.y - h / 2);
+      g.fillStyle(color, 1);
+      for (let r = 0; r < mask.length; r++) {
+        for (let c = 0; c < mask[r].length; c++) {
+          if (mask[r][c]) g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
         }
       }
     }
-
-    // pickup check for P2 only
-    if (distSq(p2.x, p2.y, awsP2.x, awsP2.y) <= (p2.size + 10) * (p2.size + 10)) {
-      playPowerUpSound();
-      // Create wall at AWS position (same size as player for visual consistency)
-      const wallX = awsP2.x;
-      const wallY = awsP2.y;
-      
-      walls.push({ 
-        x: wallX, 
-        y: wallY, 
-        size: p2.size, // Use player size for scaling
-        hits: 0 
-      });
-      
-      p2.score += 20; // Add 20 points for picking up power-up
-      showScorePopup(p2, 20, now);
-      drawScore(p2);
-      
-      awsP2 = null;
-      nextPowerUpP2At = now + getPowerUpSpawnTime();
+  }
+  if (distSq(p.x, p.y, pu.x, pu.y) <= (p.size + 10) * (p.size + 10)) {
+    playPowerUpSound();
+    if (type === 'shield') {
+      p.health = Math.min(p.maxHealth, p.health + p.maxHealth * 0.8);
+    } else if (type === 'buk') {
+      p.hasShield = true;
+    } else if (type === 'aws') {
+      walls.push({ x: pu.x, y: pu.y, size: p.size, hits: 0 });
+    }
+    p.score += 20;
+    showScorePopup(p, 20, now);
+    drawHealthBar(p);
+    drawScore(p);
+    pUps[playerIdx][type] = null;
+    if (gameMode === 'twoPlayer') {
+      pUps[playerIdx].nextAt = now + getPowerUpSpawnTime();
+    } else if (playerIdx === 0) {
+      let a = 0;
+      for (let i = 0; i < 2; i++) {
+        if (pUps[i].shield) a++;
+        if (pUps[i].buk) a++;
+        if (pUps[i].aws) a++;
+      }
+      if (a <= 1) {
+        activePowerUpType = null;
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
+      }
     }
   }
 }
 
-function spawnAwsP1(now) {
-  const margin = 20;
-  const halfX = 400;
-  // In single player mode, spawn across full screen; otherwise in P1's half
-  let x, y;
-  if (gameMode === 'singlePlayer') {
-    x = margin + Math.random() * (800 - margin * 2);
-  } else {
-    x = margin + Math.random() * (halfX - margin * 2);
+function updatePowerUps(playerIdx, now) {
+  const pu = pUps[playerIdx];
+  const active = [pu.shield, pu.buk, pu.aws].filter(x => x !== null).length;
+  const timer = gameMode === 'twoPlayer' ? pu.nextAt : nextPowerUpSpawnAt;
+  if (active === 0) {
+    if ((gameMode === 'twoPlayer' && now >= timer) || 
+        (gameMode === 'singlePlayer' && playerIdx === 0 && active < 2 && now >= timer)) {
+      const types = ['shield', 'buk', 'aws'];
+      const t = types[Math.floor(Math.random() * 3)];
+      spawnPowerUp(playerIdx, t, now);
+      if (gameMode === 'twoPlayer') {
+        pu.nextAt = now + getPowerUpSpawnTime();
+      } else {
+        activePowerUpType = t;
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
+      }
+    }
   }
-  // Spawn AWS only in playable area (below top UI section)
-  y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  awsP1 = { x, y, ps: 3, spawnTime: now }; // ps: 3 for smaller size
-}
-
-function spawnAwsP2(now) {
-  const margin = 20;
-  const halfX = 400;
-  // Spawn in P2's half (right side)
-  const x = halfX + margin + Math.random() * (halfX - margin * 2);
-  // Spawn AWS only in playable area (below top UI section)
-  const y = TOP_UI_HEIGHT + margin + Math.random() * (600 - TOP_UI_HEIGHT - margin * 2);
-  awsP2 = { x, y, ps: 3, spawnTime: now }; // ps: 3 for smaller size
+  updatePowerUp(playerIdx, 'shield', now);
+  updatePowerUp(playerIdx, 'buk', now);
+  updatePowerUp(playerIdx, 'aws', now);
 }
 
 function drawWalls() {
