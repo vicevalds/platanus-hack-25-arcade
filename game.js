@@ -419,15 +419,15 @@ function playSuccessSound(combo = 0) {
   if (combo >= 8) {
     // Glorious fanfare: 5 notes for maximum epicness
     // C5, E5, G5, C6, E6 (extended arpeggio)
-    const gloriousFreqs = [523, 659, 784, 1047, 1319]; // C5, E5, G5, C6, E6
+    const gloriousFreqs = [523, 659, 784, 1047, 1568]; // C5, E5, G5, C6, E6
     const volume = 0.15 * 1.3; // High volume for combo x8
     
     // Play extended arpeggio with slightly longer durations for grandeur
     playTone(gloriousFreqs[0], 0.1, 'square', volume); // C5
-    setTimeout(() => playTone(gloriousFreqs[1], 0.1, 'square', volume), 90); // E5
-    setTimeout(() => playTone(gloriousFreqs[2], 0.12, 'square', volume), 180); // G5
-    setTimeout(() => playTone(gloriousFreqs[3], 0.15, 'square', volume), 270); // C6 (high note for glory)
-    setTimeout(() => playTone(gloriousFreqs[4], 0.18, 'square', volume), 380); // E6 (highest note for maximum epicness)
+    setTimeout(() => playTone(gloriousFreqs[1], 0.1, 'square', volume), 60); // E5
+    setTimeout(() => playTone(gloriousFreqs[2], 0.12, 'square', volume), 120); // G5
+    setTimeout(() => playTone(gloriousFreqs[3], 0.14, 'square', volume), 180); // C6 (high note for glory)
+    setTimeout(() => playTone(gloriousFreqs[4], 0.16, 'square', volume), 250); // E6 (highest note for maximum epicness)
     return;
   }
   
@@ -912,9 +912,9 @@ function update(_time, delta) {
 
   // Health drain over time (if playing)
   if (gameState === 'playing') {
-    // Calculate current round based on elapsed time (7 seconds per round)
+    // Calculate current round based on elapsed time (6 seconds per round)
     const elapsedSeconds = (_time - gameStartTime) / 1000;
-    currentRound = Math.floor(elapsedSeconds / 7) + 1;
+    currentRound = Math.floor(elapsedSeconds / 6) + 1;
     
     // Detect round change for animation
     if (currentRound !== previousRound) {
@@ -925,15 +925,14 @@ function update(_time, delta) {
       setTimeout(() => playTone(1047, 0.1, 'square', 0.15), 100);
     }
     
-    // Base health drain rate increases every 5 rounds
-    const baseHealthDrainRate = 18; // health per second
-    const difficultyTier = Math.floor((currentRound - 1) / 5); // 0, 1, 2, 3... every 5 rounds
-    const roundMultiplier = 1 + difficultyTier * 0.1; // +10% every 5 rounds (1.0x, 1.1x, 1.2x...)
-    const healthDrainRate = baseHealthDrainRate * roundMultiplier;
+    // Base health drain rate increases by 0.4 per round (faster progression)
+    const baseHealthDrainRate = 20; // health per second (starting rate)
+    const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.3; // +0.4 per round
     
-    // Players lose health 20% faster when standing still
-    const p1DrainMultiplier = p1IsMoving ? 1.0 : 1.6;
-    const p2DrainMultiplier = p2IsMoving ? 1.0 : 1.6;
+    // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
+    const baseMultiplier = 1.0;
+    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.2 : baseMultiplier;
+    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.2 : baseMultiplier;
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
     if (gameMode === 'twoPlayer') {
@@ -1069,10 +1068,14 @@ function update(_time, delta) {
     // Update and draw score popups
     updateScorePopups(p1, dt, _time);
     drawScorePopups(p1);
+    updateHealthPopups(p1, dt, _time);
+    drawHealthPopups(p1);
     drawCombo(p1);
     if (gameMode === 'twoPlayer') {
       updateScorePopups(p2, dt, _time);
       drawScorePopups(p2);
+      updateHealthPopups(p2, dt, _time);
+      drawHealthPopups(p2);
       drawCombo(p2);
     }
   } else {
@@ -1085,6 +1088,8 @@ function update(_time, delta) {
     p2.scoreGfx.clear();
     if (p1.scorePopupGfx) p1.scorePopupGfx.clear();
     if (p2.scorePopupGfx) p2.scorePopupGfx.clear();
+    if (p1.healthPopupGfx) p1.healthPopupGfx.clear();
+    if (p2.healthPopupGfx) p2.healthPopupGfx.clear();
     if (p1.comboGfx) p1.comboGfx.clear();
     if (p2.comboGfx) p2.comboGfx.clear();
   }
@@ -1340,16 +1345,17 @@ function drawCombo(player) {
   
   // Dynamic size based on combo level
   // In single player mode: sizes are 0.5 larger (1 pixel more)
-  // Combos x1-x2: 2px (single) / 2px (two), x3-x4: 3px/3px, x5-x6: 4px/4px, x7-x8: 5px/5px
+  // In two player mode: make combo indicator larger (1 pixel more than single player)
+  // Combos x1-x2: 3px (single) / 4px (two), x3-x4: 4px/5px, x5-x6: 5px/6px, x7-x8: 6px/7px
   let ps;
   if (player.combo <= 2) {
-    ps = (gameMode === 'singlePlayer') ? 3 : 2; // Combos x1-x2: 3 píxeles (single) / 2 píxeles (two)
+    ps = (gameMode === 'singlePlayer') ? 3 : 4; // Combos x1-x2: 3 píxeles (single) / 4 píxeles (two, larger)
   } else if (player.combo <= 4) {
-    ps = (gameMode === 'singlePlayer') ? 4 : 3; // Combos x3-x4: 4 píxeles (single) / 3 píxeles (two)
+    ps = (gameMode === 'singlePlayer') ? 4 : 5; // Combos x3-x4: 4 píxeles (single) / 5 píxeles (two, larger)
   } else if (player.combo <= 6) {
-    ps = (gameMode === 'singlePlayer') ? 5 : 4; // Combos x5-x6: 5 píxeles (single) / 4 píxeles (two)
+    ps = (gameMode === 'singlePlayer') ? 5 : 6; // Combos x5-x6: 5 píxeles (single) / 6 píxeles (two, larger)
   } else {
-    ps = (gameMode === 'singlePlayer') ? 6 : 5; // Combo x7-x8: 6 píxeles (single) / 5 píxeles (two)
+    ps = (gameMode === 'singlePlayer') ? 6 : 7; // Combo x7-x8: 6 píxeles (single) / 7 píxeles (two, larger)
   }
   
   const gap = 1;
@@ -1465,8 +1471,8 @@ function drawTimer(now) {
     
     // Draw countdown timer below round
     const elapsed = (now - gameStartTime) / 1000;
-    const timeInRound = elapsed % 7;
-    const countdown = Math.max(0, Math.floor(7 - timeInRound));
+    const timeInRound = elapsed % 6;
+    const countdown = Math.max(0, Math.floor(6 - timeInRound));
     const timeText = String(countdown).padStart(2, '0');
     
     // Calculate width for time
@@ -1519,8 +1525,8 @@ function drawTimer(now) {
     
     // Draw countdown timer
     const elapsed = (now - gameStartTime) / 1000;
-    const timeInRound = elapsed % 7;
-    const countdown = Math.max(0, Math.floor(7 - timeInRound));
+    const timeInRound = elapsed % 6;
+    const countdown = Math.max(0, Math.floor(6 - timeInRound));
     const text = String(countdown).padStart(2, '0');
     drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
   }
@@ -1538,6 +1544,7 @@ function initPlayerUI(scene, player, side) {
   player.errorFlashUntil = 0; // Error flash timestamp
   player.patternErrors = 0; // Track errors in current pattern
   player.scorePopups = []; // Array of active score popups {amount, x, y, life, maxLife}
+  player.healthPopups = []; // Array of active health popups {percent, x, y, life, maxLife}
   player.pendingScore = 0; // Points accumulated during current pattern (not yet added to total)
   player.combo = 0; // Combo counter
   player.healthGfx = scene.add.graphics();
@@ -1553,6 +1560,8 @@ function initPlayerUI(scene, player, side) {
   player.scoreGfx.setDepth(50); // Above arena (10) but below players (100)
   player.scorePopupGfx = scene.add.graphics();
   player.scorePopupGfx.setDepth(60); // Above score
+  player.healthPopupGfx = scene.add.graphics();
+  player.healthPopupGfx.setDepth(60); // Above health bar
   player.comboGfx = scene.add.graphics();
   player.comboGfx.setDepth(50); // Same depth as score
   
@@ -1735,10 +1744,31 @@ function tryStep(player, input) {
       playSuccessSound(player.combo);
       
       // Recover health when completing pattern (capped at max health)
-      // Base recovery: 50% of max health, multiplied by combo multiplier
-      const baseHealthRecovery = player.maxHealth * 0.5;
-      const healthRecovery = baseHealthRecovery * comboMultiplier;
+      // Health recovery percentage based on combo level
+      let healthRecoveryPercent = 0.4; // Default: 40% for combo x1
+      if (player.combo >= 8) {
+        healthRecoveryPercent = 0.70; // x8+: 70%
+      } else if (player.combo === 7) {
+        healthRecoveryPercent = 0.65; // x7: 65%
+      } else if (player.combo === 6) {
+        healthRecoveryPercent = 0.60; // x6: 60%
+      } else if (player.combo === 5) {
+        healthRecoveryPercent = 0.55; // x5: 55%
+      } else if (player.combo === 4) {
+        healthRecoveryPercent = 0.50; // x4: 50%
+      } else if (player.combo === 3) {
+        healthRecoveryPercent = 0.45; // x3: 45%
+      } else if (player.combo === 2) {
+        healthRecoveryPercent = 0.40; // x2: 40%
+      } else {
+        healthRecoveryPercent = 0.40; // x1: 40%
+      }
+      
+      const healthRecovery = player.maxHealth * healthRecoveryPercent;
       player.health = Math.min(player.maxHealth, player.health + healthRecovery);
+      
+      // Show health recovery popup
+      showHealthPopup(player, Math.round(healthRecoveryPercent * 100), sceneRef.time.now);
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
       // In single player mode, spawn projectiles targeting the same player
@@ -1786,9 +1816,9 @@ function positionUI(player) {
   } else {
     // Move health bar and pattern more toward center to avoid overlap with high scores and long patterns
     centerX = player.side === 'L' ? 240 : 560; // Moved toward center (was 200/600)
-    // In two player mode: score at same height as health bar (healthY), combo below
+    // In two player mode: score at same height as health bar (healthY), combo below score
     player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: healthY }; // Same height as health bar
-    player.comboAnchor = { x: player.side === 'L' ? 20 : 780, y: 65 }; // At old score height
+    player.comboAnchor = { x: player.side === 'L' ? 20 : 780, y: 95 }; // Below score counter (moved down from 65)
     player.scoreAlignRight = player.side === 'R';
   }
   
@@ -1808,8 +1838,14 @@ function showScorePopup(player, amount, now) {
   if (!player.scorePopups) player.scorePopups = [];
   
   // Create popup at score position
-  const x = player.scoreAnchor.x + (player.scoreAlignRight ? -40 : 80);
-  const y = player.scoreAnchor.y;
+  // In two player mode: position below score counter to avoid overlap
+  let x = player.scoreAnchor.x + (player.scoreAlignRight ? -40 : 80);
+  let y = player.scoreAnchor.y;
+  
+  if (gameMode === 'twoPlayer') {
+    // Position below score counter (score is at y: 35, place popup at y: 70)
+    y = player.scoreAnchor.y + 35; // Below score counter
+  }
   
   player.scorePopups.push({
     amount: amount,
@@ -1882,6 +1918,118 @@ function drawScorePopups(player) {
           [0,0,0],
           [1,1,1],
           [0,0,0]
+        ];
+      } else {
+        d = DIGITS[char];
+      }
+      
+      if (!d) continue;
+      
+      for (let r = 0; r < d.length; r++) {
+        for (let c = 0; c < d[r].length; c++) {
+          if (d[r][c]) gfx.fillRect(x + c * ps, currentY + r * ps, ps, ps);
+        }
+      }
+      x += d[0].length * ps + gap;
+    }
+  }
+}
+
+function showHealthPopup(player, percent, now) {
+  if (!player.healthPopups) player.healthPopups = [];
+  
+  // Create popup position
+  const barWidth = 250; // Same as in drawHealthBar
+  let x, y;
+  
+  if (gameMode === 'twoPlayer') {
+    // In two player mode: position below health bar and to the left of patterns
+    // Health bar is at y: 35, place popup below it (y: 60)
+    // Pattern anchor is at centerX (240 or 560), place popup to the left
+    const healthY = player.healthAnchor ? player.healthAnchor.y : 35;
+    const patternX = player.patternAnchor ? player.patternAnchor.x : (player.side === 'L' ? 240 : 560);
+    y = healthY + 25; // Below health bar (health bar height ~22, add some spacing)
+    x = patternX - 80; // To the left of patterns
+  } else {
+    // Single player mode: to the right of health bar (original behavior)
+    const offsetX = 10; // Space between bar and popup
+    x = player.healthAnchor ? (player.healthAnchor.x + barWidth / 2 + offsetX) : (player.side === 'L' ? 200 + barWidth / 2 + offsetX : 600 + barWidth / 2 + offsetX);
+    y = player.healthAnchor ? player.healthAnchor.y : 35;
+  }
+  
+  player.healthPopups.push({
+    percent: percent,
+    x: x,
+    y: y,
+    startY: y,
+    life: 0,
+    maxLife: 1000 // 1 second
+  });
+}
+
+function updateHealthPopups(player, dt, now) {
+  if (!player.healthPopups) return;
+  
+  // Update and remove expired popups
+  for (let i = player.healthPopups.length - 1; i >= 0; i--) {
+    const popup = player.healthPopups[i];
+    popup.life += dt * 1000; // Convert to ms
+    
+    // Remove if expired
+    if (popup.life >= popup.maxLife) {
+      player.healthPopups.splice(i, 1);
+    }
+  }
+}
+
+function drawHealthPopups(player) {
+  if (!player.healthPopups || !player.healthPopupGfx) return;
+  
+  const gfx = player.healthPopupGfx;
+  gfx.clear();
+  
+  for (const popup of player.healthPopups) {
+    // Calculate alpha based on life (fade out)
+    const progress = popup.life / popup.maxLife;
+    const alpha = 1 - progress;
+    
+    // Move popup upward
+    const offsetY = -progress * 30; // Move up 30 pixels
+    const currentY = popup.startY + offsetY;
+    
+    // Color: green for health recovery
+    const color = 0x00ff00;
+    
+    // Format text (with + and %)
+    const text = '+' + String(popup.percent) + '%';
+    
+    // Draw using pixel digits (smaller size)
+    const ps = 3; // pixel size (smaller than score)
+    const gap = 1;
+    
+    gfx.fillStyle(color, alpha);
+    
+    let x = popup.x;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      let d;
+      
+      // Handle special characters
+      if (char === '+') {
+        // Simple plus: 3x3
+        d = [
+          [0,1,0],
+          [1,1,1],
+          [0,1,0]
+        ];
+      } else if (char === '%') {
+        // Percent symbol: 3x5
+        d = [
+          [1,0,1],
+          [0,0,1],
+          [0,1,0],
+          [1,0,0],
+          [1,0,1]
         ];
       } else {
         d = DIGITS[char];
@@ -2557,6 +2705,8 @@ function startGame() {
   p2.patternErrors = 0;
   p1.scorePopups = [];
   p2.scorePopups = [];
+  p1.healthPopups = [];
+  p2.healthPopups = [];
   p1.pendingScore = 0;
   p2.pendingScore = 0;
   p1.combo = 0;
@@ -2674,6 +2824,8 @@ function restartGame() {
   p2.patternErrors = 0;
   p1.scorePopups = [];
   p2.scorePopups = [];
+  p1.healthPopups = [];
+  p2.healthPopups = [];
   p1.pendingScore = 0;
   p2.pendingScore = 0;
   p1.combo = 0;
@@ -2809,6 +2961,8 @@ function returnToMenu() {
   p2.patternErrors = 0;
   p1.scorePopups = [];
   p2.scorePopups = [];
+  p1.healthPopups = [];
+  p2.healthPopups = [];
   p1.pendingScore = 0;
   p2.pendingScore = 0;
   
@@ -3376,29 +3530,46 @@ function spawnAwsP2(now) {
 }
 
 function drawWalls() {
-  // Draw all active walls using pixel mask (2x7 pixels, smaller size)
+  // Draw all active walls with brick pattern (2x7 pixels, maintaining exact size)
   // Draw on player layer so walls appear above map but players can pass behind
   for (let i = 0; i < walls.length; i++) {
     const wall = walls[i];
     const cols = WALL_MASK[0].length; // 2
     const rows = WALL_MASK.length; // 7
     
-    // Smaller wall size (reduced from wall.size * 2 to wall.size * 1)
+    // Calculate pixel size maintaining exact wall dimensions
     const ps = Math.max(2, Math.floor(wall.size / cols));
     const w = cols * ps;
     const h = rows * ps;
     const sx = Math.floor(wall.x - w / 2);
     const sy = Math.floor(wall.y - h / 2);
     
-    // Draw wall using mask with AWS orange color on player layer
-    gPlayers.fillStyle(0xFF9900, 1);
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (WALL_MASK[r][c]) {
-          gPlayers.fillRect(sx + c * ps, sy + r * ps, ps, ps);
-        }
-      }
+    // Draw brick pattern: orange bricks with black mortar lines
+    // All lines are drawn within the exact wall dimensions
+    const brickOrange = 0xFF9900;
+    const mortarBlack = 0x000000;
+    
+    // First, fill entire wall with orange bricks
+    gPlayers.fillStyle(brickOrange, 1);
+    gPlayers.fillRect(sx, sy, w, h);
+    
+    // Then draw black mortar lines within the wall area
+    gPlayers.fillStyle(mortarBlack, 1);
+    
+    // Horizontal mortar lines between brick rows (thin lines)
+    const mortarThickness = Math.max(1, Math.floor(ps * 0.15)); // 15% of pixel size, min 1px
+    for (let r = 1; r < rows; r++) {
+      const mortarY = sy + r * ps - Math.floor(mortarThickness / 2);
+      gPlayers.fillRect(sx, mortarY, w, mortarThickness);
     }
+    
+    // Vertical mortar line in the middle (separating left and right bricks)
+    const midX = sx + Math.floor(w / 2);
+    gPlayers.fillRect(midX - Math.floor(mortarThickness / 2), sy, mortarThickness, h);
+    
+    // Vertical edges (thin black outline)
+    gPlayers.fillRect(sx, sy, mortarThickness, h); // Left edge
+    gPlayers.fillRect(sx + w - mortarThickness, sy, mortarThickness, h); // Right edge
   }
 }
 
