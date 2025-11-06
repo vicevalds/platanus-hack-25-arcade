@@ -187,7 +187,7 @@ const BUK_LOGO = [
 const AWS_LOGO = [
   [0,0,1,0,1,1,0,0,0,0,0,1,1,0,1,1,1],
   [0,1,1,1,0,1,1,0,1,0,1,1,0,1,1,0,0],
-  [0,1,0,1,0,1,1,0,1,0,1,0,0,0,1,1,0],
+  [0,1,0,1,0,1,1,0,1,0,1,1,0,0,1,1,0],
   [1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,1,1],
   [1,1,0,1,1,0,0,1,0,1,0,0,0,1,1,1,0]
 ];
@@ -1012,11 +1012,11 @@ function update(_time, delta) {
     updateAwsP2(_time);
   }
 
-  // Draw walls
-  drawWalls();
-
   // timer
   drawTimer(_time);
+
+  // Draw walls on player layer (above map, but players drawn after so they appear in front)
+  drawWalls();
 
   // players as pixel people (with immunity blink) - drawn on player layer (above UI)
   // P1 (mago): piel, azul, café
@@ -1571,21 +1571,21 @@ function makePattern() {
   const round = currentRound;
   const rand = Math.random();
   
-  if (round <= 3) {
+  if (round <= 2) {
     // Rondas 1-10: 80% de 3 símbolos, 20% de 4 símbolos
     if (rand < 0.50) {
       len = 2;// ACA
     } else {
       len = 3;
     }
-  } else if (round <= 10) {
+  } else if (round <= 8) {
     // Rondas 1-10: 80% de 3 símbolos, 20% de 4 símbolos
     if (rand < 0.80) {
       len = 3;// ACA
     } else {
       len = 4;
     }
-  } else if (round <= 20) {
+  } else if (round <= 18) {
     // Rondas 11-20: 70% de 4, 30% de 5
     if (rand < 0.70) {
       len = 4;
@@ -3377,6 +3377,7 @@ function spawnAwsP2(now) {
 
 function drawWalls() {
   // Draw all active walls using pixel mask (2x7 pixels, smaller size)
+  // Draw on player layer so walls appear above map but players can pass behind
   for (let i = 0; i < walls.length; i++) {
     const wall = walls[i];
     const cols = WALL_MASK[0].length; // 2
@@ -3389,12 +3390,12 @@ function drawWalls() {
     const sx = Math.floor(wall.x - w / 2);
     const sy = Math.floor(wall.y - h / 2);
     
-    // Draw wall using mask with AWS orange color
-    g.fillStyle(0xFF9900, 1);
+    // Draw wall using mask with AWS orange color on player layer
+    gPlayers.fillStyle(0xFF9900, 1);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (WALL_MASK[r][c]) {
-          g.fillRect(sx + c * ps, sy + r * ps, ps, ps);
+          gPlayers.fillRect(sx + c * ps, sy + r * ps, ps, ps);
         }
       }
     }
