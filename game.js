@@ -383,10 +383,19 @@ function initAudio() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
+  // Resume audio context if suspended (required by browsers after user interaction)
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
 }
 
 function playTone(freq, duration, type = 'square', volume = 0.15) {
   if (!audioContext) initAudio();
+  
+  // Don't play if audio context is suspended (will cause accumulation of notes)
+  if (audioContext.state === 'suspended') {
+    return;
+  }
   
   const osc = audioContext.createOscillator();
   const gain = audioContext.createGain();
@@ -488,6 +497,23 @@ function playIntroMusic() {
   if (!audioContext) initAudio();
   stopMusic();
   
+  // Ensure audio context is running before playing music
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().then(() => {
+      // Start music after context is resumed
+      startIntroMusicLoop();
+    });
+  } else {
+    startIntroMusicLoop();
+  }
+}
+
+function startIntroMusicLoop() {
+  // Don't start if audio context is suspended
+  if (!audioContext || audioContext.state === 'suspended') {
+    return;
+  }
+  
   // Simple intro melody loop (heroic arcade theme)
   const melody = [
     { freq: 523, dur: 0.15 }, // C5
@@ -503,10 +529,14 @@ function playIntroMusic() {
   const loopDuration = melody.reduce((sum, note) => sum + note.dur, 0) * 1000;
   
   const playMelody = () => {
+    // Only play if context is running
+    if (!audioContext || audioContext.state !== 'running') {
+      return;
+    }
     time = 0;
     melody.forEach(note => {
       const timeoutId = setTimeout(() => {
-        if (currentMusic === introMusicLoop) {
+        if (currentMusic === introMusicLoop && audioContext && audioContext.state === 'running') {
           playTone(note.freq, note.dur, 'square', 0.08);
         }
       }, time * 1000);
@@ -660,6 +690,16 @@ function create() {
 
   // Input handling - keyboard events mapped to arcade buttons
   this.input.keyboard.on('keydown', (ev) => {
+    // Resume audio context on first user interaction (required by browsers)
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().then(() => {
+        // If we're in menu and music hasn't started, start it now
+        if (gameState === 'menu' && !introMusicLoop) {
+          playIntroMusic();
+        }
+      });
+    }
+    
     const arcadeCode = KEYBOARD_TO_ARCADE[ev.key];
     
     // Set arcade button state
