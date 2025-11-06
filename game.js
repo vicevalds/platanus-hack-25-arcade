@@ -514,30 +514,86 @@ function startIntroMusicLoop() {
     return;
   }
   
-  // Simple intro melody loop (heroic arcade theme)
+  // Battle atmosphere music - intense and dark
+  // Bass rhythm (war drums)
+  const bassPattern = [
+    { freq: 80, dur: 0.1, vol: 0.12 }, // Deep bass
+    { freq: 0, dur: 0.15 }, // Rest
+    { freq: 80, dur: 0.1, vol: 0.12 },
+    { freq: 0, dur: 0.15 },
+    { freq: 100, dur: 0.1, vol: 0.15 }, // Slightly higher
+    { freq: 0, dur: 0.15 },
+    { freq: 80, dur: 0.1, vol: 0.12 },
+    { freq: 0, dur: 0.2 }
+  ];
+  
+  // Dark melody (minor scale, tense)
   const melody = [
-    { freq: 523, dur: 0.15 }, // C5
-    { freq: 659, dur: 0.15 }, // E5
-    { freq: 784, dur: 0.15 }, // G5
-    { freq: 1047, dur: 0.3 }, // C6
-    { freq: 784, dur: 0.15 }, // G5
-    { freq: 659, dur: 0.15 }, // E5
-    { freq: 523, dur: 0.3 }  // C5
+    { freq: 220, dur: 0.2, vol: 0.06 }, // A3
+    { freq: 247, dur: 0.2, vol: 0.06 }, // B3
+    { freq: 262, dur: 0.3, vol: 0.07 }, // C4
+    { freq: 294, dur: 0.2, vol: 0.06 }, // D4
+    { freq: 262, dur: 0.2, vol: 0.06 }, // C4
+    { freq: 220, dur: 0.3, vol: 0.07 }, // A3
+    { freq: 196, dur: 0.2, vol: 0.06 }, // G3
+    { freq: 220, dur: 0.4, vol: 0.08 }  // A3 (longer)
+  ];
+  
+  // High tension layer (sparse, dramatic)
+  const tensionLayer = [
+    { freq: 0, dur: 0.4 },
+    { freq: 330, dur: 0.15, vol: 0.05 }, // E4
+    { freq: 0, dur: 0.3 },
+    { freq: 392, dur: 0.2, vol: 0.06 }, // G4
+    { freq: 0, dur: 0.5 },
+    { freq: 330, dur: 0.15, vol: 0.05 },
+    { freq: 0, dur: 0.3 },
+    { freq: 294, dur: 0.25, vol: 0.06 } // D4
   ];
   
   let time = 0;
-  const loopDuration = melody.reduce((sum, note) => sum + note.dur, 0) * 1000;
+  const loopDuration = 2.4 * 1000; // 2.4 seconds loop
   
-  const playMelody = () => {
+  const playBattleMusic = () => {
     // Only play if context is running
     if (!audioContext || audioContext.state !== 'running') {
       return;
     }
     time = 0;
+    
+    // Play bass rhythm
+    bassPattern.forEach(note => {
+      const timeoutId = setTimeout(() => {
+        if (currentMusic === introMusicLoop && audioContext && audioContext.state === 'running') {
+          if (note.freq > 0) {
+            playTone(note.freq, note.dur, 'sawtooth', note.vol || 0.12);
+          }
+        }
+      }, time * 1000);
+      musicTimeouts.push(timeoutId);
+      time += note.dur;
+    });
+    
+    // Play melody (offset slightly)
+    time = 0.1;
     melody.forEach(note => {
       const timeoutId = setTimeout(() => {
         if (currentMusic === introMusicLoop && audioContext && audioContext.state === 'running') {
-          playTone(note.freq, note.dur, 'square', 0.08);
+          playTone(note.freq, note.dur, 'square', note.vol || 0.06);
+        }
+      }, time * 1000);
+      musicTimeouts.push(timeoutId);
+      time += note.dur;
+    });
+    
+    // Play tension layer
+    time = 0;
+    tensionLayer.forEach(note => {
+      const timeoutId = setTimeout(() => {
+        if (currentMusic === introMusicLoop && audioContext && audioContext.state === 'running') {
+          if (note.freq > 0) {
+            playTone(note.freq, note.dur, 'triangle', note.vol || 0.05);
+          }
         }
       }, time * 1000);
       musicTimeouts.push(timeoutId);
@@ -545,8 +601,8 @@ function startIntroMusicLoop() {
     });
   };
   
-  playMelody();
-  introMusicLoop = setInterval(playMelody, loopDuration + 200);
+  playBattleMusic();
+  introMusicLoop = setInterval(playBattleMusic, loopDuration + 100);
   currentMusic = introMusicLoop;
 }
 
@@ -554,29 +610,90 @@ function playGameMusic() {
   if (!audioContext) initAudio();
   stopMusic();
   
-  // Battle music loop (intense arcade theme)
-  const melody = [
-    { freq: 392, dur: 0.12 }, // G4
-    { freq: 392, dur: 0.12 }, // G4
-    { freq: 440, dur: 0.12 }, // A4
-    { freq: 523, dur: 0.24 }, // C5
-    { freq: 494, dur: 0.12 }, // B4
-    { freq: 440, dur: 0.12 }, // A4
-    { freq: 392, dur: 0.24 }, // G4
-    { freq: 349, dur: 0.12 }, // F4
-    { freq: 392, dur: 0.12 }, // G4
-    { freq: 440, dur: 0.24 }  // A4
+  // Epic battle music - cleaner, more space, balanced volume
+  // Spaced bass rhythm (war drums)
+  const bassDrum = [
+    { freq: 90, dur: 0.12, vol: 0.08 },
+    { freq: 0, dur: 0.2 },
+    { freq: 90, dur: 0.12, vol: 0.08 },
+    { freq: 0, dur: 0.15 },
+    { freq: 110, dur: 0.12, vol: 0.09 },
+    { freq: 0, dur: 0.2 },
+    { freq: 90, dur: 0.12, vol: 0.08 },
+    { freq: 0, dur: 0.25 }
+  ];
+  
+  // Continuous flowing melody (epic combat theme)
+  const mainMelody = [
+    { freq: 440, dur: 0.15, vol: 0.07 }, // A4
+    { freq: 494, dur: 0.15, vol: 0.07 }, // B4
+    { freq: 523, dur: 0.18, vol: 0.075 },  // C5
+    { freq: 587, dur: 0.15, vol: 0.07 }, // D5
+    { freq: 659, dur: 0.18, vol: 0.075 },  // E5
+    { freq: 587, dur: 0.15, vol: 0.07 }, // D5
+    { freq: 523, dur: 0.15, vol: 0.07 }, // C5
+    { freq: 494, dur: 0.15, vol: 0.07 }, // B4
+    { freq: 440, dur: 0.18, vol: 0.075 },  // A4
+    { freq: 392, dur: 0.15, vol: 0.07 }, // G4
+    { freq: 440, dur: 0.18, vol: 0.075 },  // A4
+    { freq: 494, dur: 0.15, vol: 0.07 }, // B4
+    { freq: 523, dur: 0.2, vol: 0.08 }   // C5 (longer)
+  ];
+  
+  // Subtle rhythm layer (sparse, supportive)
+  const rhythmLayer = [
+    { freq: 220, dur: 0.2, vol: 0.06 }, // A3
+    { freq: 0, dur: 0.3 },
+    { freq: 262, dur: 0.2, vol: 0.06 }, // C4
+    { freq: 0, dur: 0.3 },
+    { freq: 294, dur: 0.2, vol: 0.06 }, // D4
+    { freq: 0, dur: 0.3 },
+    { freq: 262, dur: 0.2, vol: 0.06 }, // C4
+    { freq: 0, dur: 0.2 }
   ];
   
   let time = 0;
-  const loopDuration = melody.reduce((sum, note) => sum + note.dur, 0) * 1000;
+  const loopDuration = 2.4 * 1000; // Slower 2.4 second loop for more space
   
-  const playMelody = () => {
+  const playEpicBattle = () => {
+    if (!audioContext || audioContext.state !== 'running') {
+      return;
+    }
     time = 0;
-    melody.forEach(note => {
+    
+    // Play bass drum (foundation - spaced out)
+    bassDrum.forEach(note => {
       const timeoutId = setTimeout(() => {
-        if (currentMusic === gameMusicLoop) {
-          playTone(note.freq, note.dur, 'square', 0.06);
+        if (currentMusic === gameMusicLoop && audioContext && audioContext.state === 'running') {
+          if (note.freq > 0) {
+            playTone(note.freq, note.dur, 'sine', note.vol || 0.08);
+          }
+        }
+      }, time * 1000);
+      musicTimeouts.push(timeoutId);
+      time += note.dur;
+    });
+    
+    // Play main melody (continuous, flowing)
+    time = 0.1;
+    mainMelody.forEach(note => {
+      const timeoutId = setTimeout(() => {
+        if (currentMusic === gameMusicLoop && audioContext && audioContext.state === 'running') {
+          playTone(note.freq, note.dur, 'triangle', note.vol || 0.06);
+        }
+      }, time * 1000);
+      musicTimeouts.push(timeoutId);
+      time += note.dur;
+    });
+    
+    // Play rhythm layer (sparse, supportive)
+    time = 0.15;
+    rhythmLayer.forEach(note => {
+      const timeoutId = setTimeout(() => {
+        if (currentMusic === gameMusicLoop && audioContext && audioContext.state === 'running') {
+          if (note.freq > 0) {
+            playTone(note.freq, note.dur, 'sine', note.vol || 0.05);
+          }
         }
       }, time * 1000);
       musicTimeouts.push(timeoutId);
@@ -584,8 +701,8 @@ function playGameMusic() {
     });
   };
   
-  playMelody();
-  gameMusicLoop = setInterval(playMelody, loopDuration + 100);
+  playEpicBattle();
+  gameMusicLoop = setInterval(playEpicBattle, loopDuration + 100);
   currentMusic = gameMusicLoop;
 }
 
@@ -593,35 +710,84 @@ function playVictoryMusic() {
   if (!audioContext) initAudio();
   stopMusic();
   
-  // Victory fanfare (triumphant celebratory theme)
+  // Tragic catastrophic game over theme (sad, descending minor scale)
+  // Deep bass foundation (catastrophic)
+  const bassLayer = [
+    { freq: 65, dur: 0.4, vol: 0.12 }, // C2 (very low)
+    { freq: 0, dur: 0.1 },
+    { freq: 65, dur: 0.4, vol: 0.12 },
+    { freq: 0, dur: 0.1 },
+    { freq: 58, dur: 0.5, vol: 0.14 }, // A#1 (even lower)
+    { freq: 0, dur: 0.2 },
+    { freq: 55, dur: 0.6, vol: 0.15 }  // G#1 (lowest, sustained)
+  ];
+  
+  // Main tragic melody (descending minor scale)
   const melody = [
-    { freq: 523, dur: 0.15 }, // C5
-    { freq: 659, dur: 0.15 }, // E5
-    { freq: 784, dur: 0.15 }, // G5
-    { freq: 1047, dur: 0.3 }, // C6
-    { freq: 784, dur: 0.15 }, // G5
-    { freq: 1047, dur: 0.3 }, // C6
-    { freq: 1047, dur: 0.2 }, // C6
-    { freq: 988, dur: 0.2 },  // B5
-    { freq: 880, dur: 0.2 },  // A5
-    { freq: 784, dur: 0.2 },  // G5
-    { freq: 659, dur: 0.2 },  // E5
-    { freq: 784, dur: 0.4 },  // G5
-    { freq: 1047, dur: 0.6 }  // C6 (final sustained note)
+    { freq: 330, dur: 0.3, vol: 0.08 }, // E4
+    { freq: 294, dur: 0.3, vol: 0.08 }, // D4
+    { freq: 262, dur: 0.4, vol: 0.09 }, // C4
+    { freq: 233, dur: 0.3, vol: 0.08 }, // A#3
+    { freq: 220, dur: 0.4, vol: 0.09 }, // A3
+    { freq: 196, dur: 0.3, vol: 0.08 }, // G3
+    { freq: 175, dur: 0.5, vol: 0.1 },  // F3 (longer, more tragic)
+    { freq: 165, dur: 0.6, vol: 0.11 }  // E3 (final, sustained, very sad)
+  ];
+  
+  // High tension layer (sparse, dramatic)
+  const tensionLayer = [
+    { freq: 0, dur: 0.5 },
+    { freq: 392, dur: 0.25, vol: 0.06 }, // G4
+    { freq: 0, dur: 0.3 },
+    { freq: 330, dur: 0.3, vol: 0.07 }, // E4
+    { freq: 0, dur: 0.4 },
+    { freq: 294, dur: 0.4, vol: 0.08 }, // D4
+    { freq: 0, dur: 0.3 },
+    { freq: 262, dur: 0.5, vol: 0.09 }  // C4 (final, sustained)
   ];
   
   let time = 0;
-  melody.forEach(note => {
+  
+  // Play bass layer (foundation)
+  bassLayer.forEach(note => {
     const timeoutId = setTimeout(() => {
-      if (currentMusic === 'victory') {
-        playTone(note.freq, note.dur, 'square', 0.1);
+      if (currentMusic === 'victory' && audioContext && audioContext.state === 'running') {
+        if (note.freq > 0) {
+          playTone(note.freq, note.dur, 'sawtooth', note.vol || 0.12);
+        }
       }
     }, time * 1000);
     musicTimeouts.push(timeoutId);
     time += note.dur;
   });
   
-  // Victory music doesn't loop, it's a one-time fanfare
+  // Play main melody (tragic descent)
+  time = 0.2;
+  melody.forEach(note => {
+    const timeoutId = setTimeout(() => {
+      if (currentMusic === 'victory' && audioContext && audioContext.state === 'running') {
+        playTone(note.freq, note.dur, 'triangle', note.vol || 0.08);
+      }
+    }, time * 1000);
+    musicTimeouts.push(timeoutId);
+    time += note.dur;
+  });
+  
+  // Play tension layer (dramatic accents)
+  time = 0.1;
+  tensionLayer.forEach(note => {
+    const timeoutId = setTimeout(() => {
+      if (currentMusic === 'victory' && audioContext && audioContext.state === 'running') {
+        if (note.freq > 0) {
+          playTone(note.freq, note.dur, 'sine', note.vol || 0.06);
+        }
+      }
+    }, time * 1000);
+    musicTimeouts.push(timeoutId);
+    time += note.dur;
+  });
+  
+  // Game over music doesn't loop, it's a one-time tragic theme
   currentMusic = 'victory';
 }
 
@@ -1033,22 +1199,24 @@ function update(_time, delta) {
   // move and draw projectiles (on arena layer)
   updateProjectiles(dt, _time);
 
-  // shield power-ups (on arena layer) - one per player
-  updateShieldP1(_time);
-  if (gameMode === 'twoPlayer') {
-    updateShieldP2(_time);
-  }
+  // shield power-ups (on arena layer) - one per player (only when playing)
+  if (gameState === 'playing') {
+    updateShieldP1(_time);
+    if (gameMode === 'twoPlayer') {
+      updateShieldP2(_time);
+    }
 
-  // buk power-ups (on arena layer) - one per player
-  updateBukP1(_time);
-  if (gameMode === 'twoPlayer') {
-    updateBukP2(_time);
-  }
+    // buk power-ups (on arena layer) - one per player
+    updateBukP1(_time);
+    if (gameMode === 'twoPlayer') {
+      updateBukP2(_time);
+    }
 
-  // AWS power-ups (on arena layer) - one per player
-  updateAwsP1(_time);
-  if (gameMode === 'twoPlayer') {
-    updateAwsP2(_time);
+    // AWS power-ups (on arena layer) - one per player
+    updateAwsP1(_time);
+    if (gameMode === 'twoPlayer') {
+      updateAwsP2(_time);
+    }
   }
 
   // timer
@@ -2473,6 +2641,14 @@ function endGame(winner, loser) {
   if (gameState === 'gameOver' || !sceneRef) return; // already ended or no scene
   gameState = 'gameOver';
   
+  // Clear all power-ups when game ends
+  shieldP1 = null;
+  shieldP2 = null;
+  bukP1 = null;
+  bukP2 = null;
+  awsP1 = null;
+  awsP2 = null;
+  
   // Play victory music
   playVictoryMusic();
   
@@ -3158,7 +3334,7 @@ function updateShieldP1(now) {
     // pickup check for P1 only
     if (distSq(p1.x, p1.y, shieldP1.x, shieldP1.y) <= (p1.size + 10) * (p1.size + 10)) {
       playPowerUpSound();
-      p1.health = p1.maxHealth; // Fill health to 100%
+      p1.health = Math.min(p1.maxHealth, p1.health + p1.maxHealth * 0.8); // Fill health to 80%
       p1.score += 20; // Add 20 points for picking up power-up
       showScorePopup(p1, 20, now);
       drawHealthBar(p1);
@@ -3217,12 +3393,12 @@ function updateShieldP2(now) {
       const ps = shieldP2.ps;
       // Banana pixel art (two colors: peel yellow and stem brown)
       const bananaY = [
-        [0,0,0,0,1,0,0],
-        [0,0,0,0,1,1,0],
-        [0,0,0,0,1,1,0],
-        [0,0,0,1,1,1,0],
-        [1,1,1,1,1,1,0],
-        [0,1,1,1,1,0,0]
+        [0,0,0,0,0,1,0],
+        [0,0,0,0,1,1,1],
+        [0,0,0,0,0,1,1],
+        [0,0,0,0,1,1,1],
+        [0,1,1,1,1,1,1],
+        [0,0,1,1,1,1,0]
       ];
       const bananaB = [
         [0,0,0,0,1,0,0],
@@ -3254,7 +3430,7 @@ function updateShieldP2(now) {
     // pickup check for P2 only
     if (distSq(p2.x, p2.y, shieldP2.x, shieldP2.y) <= (p2.size + 10) * (p2.size + 10)) {
       playPowerUpSound();
-      p2.health = p2.maxHealth; // Fill health to 100%
+      p2.health = Math.min(p2.maxHealth, p2.health + p2.maxHealth * 0.8); // Fill health to 80%
       p2.score += 20; // Add 20 points for picking up power-up
       showScorePopup(p2, 20, now);
       drawHealthBar(p2);
