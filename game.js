@@ -1277,8 +1277,8 @@ function drawScore(player) {
   gfx.clear();
   const text = String(player.score || 0);
   
-  // Base size: 4 for single player, 5 for two player mode (0.1 larger)
-  let basePs = (gameMode === 'twoPlayer') ? 5 : 4; // Larger in two player mode
+  // Base size: 5 pixels (single player increased by 0.5 from 4 to 5)
+  let basePs = 5; // Base size for both modes
   let color = 0xffff66; // Default yellow
   
   // In two player mode only, check if this player is winning
@@ -1328,16 +1328,17 @@ function drawCombo(player) {
   const comboText = 'X' + String(player.combo);
   
   // Dynamic size based on combo level
-  // Combos x1-x2: 2px, x3-x4: 3px, x5-x6: 4px, x7: 5px, x8: 5px
+  // In single player mode: sizes are 0.5 larger (1 pixel more)
+  // Combos x1-x2: 2px (single) / 2px (two), x3-x4: 3px/3px, x5-x6: 4px/4px, x7-x8: 5px/5px
   let ps;
   if (player.combo <= 2) {
-    ps = 2; // Combos x1-x2: 2 píxeles
+    ps = (gameMode === 'singlePlayer') ? 3 : 2; // Combos x1-x2: 3 píxeles (single) / 2 píxeles (two)
   } else if (player.combo <= 4) {
-    ps = 3; // Combos x3-x4: 3 píxeles
+    ps = (gameMode === 'singlePlayer') ? 4 : 3; // Combos x3-x4: 4 píxeles (single) / 3 píxeles (two)
   } else if (player.combo <= 6) {
-    ps = 4; // Combos x5-x6: 4 píxeles
+    ps = (gameMode === 'singlePlayer') ? 5 : 4; // Combos x5-x6: 5 píxeles (single) / 4 píxeles (two)
   } else {
-    ps = 5; // Combo x7 y x8: 5 píxeles
+    ps = (gameMode === 'singlePlayer') ? 6 : 5; // Combo x7-x8: 6 píxeles (single) / 5 píxeles (two)
   }
   
   const gap = 1;
@@ -1559,10 +1560,17 @@ function makePattern() {
   const round = currentRound;
   const rand = Math.random();
   
-  if (round <= 10) {
+  if (round <= 3) {
+    // Rondas 1-10: 80% de 3 símbolos, 20% de 4 símbolos
+    if (rand < 0.50) {
+      len = 2;// ACA
+    } else {
+      len = 3;
+    }
+  } else if (round <= 10) {
     // Rondas 1-10: 80% de 3 símbolos, 20% de 4 símbolos
     if (rand < 0.80) {
-      len = 7;// ACA
+      len = 3;// ACA
     } else {
       len = 4;
     }
@@ -1767,8 +1775,8 @@ function positionUI(player) {
   } else {
     // Move health bar and pattern more toward center to avoid overlap with high scores and long patterns
     centerX = player.side === 'L' ? 240 : 560; // Moved toward center (was 200/600)
-    // In two player mode: score at same height as health bar, combo at old score height
-    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: 35 }; // Same height as health bar
+    // In two player mode: score at same height as health bar (healthY), combo below
+    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: healthY }; // Same height as health bar
     player.comboAnchor = { x: player.side === 'L' ? 20 : 780, y: 65 }; // At old score height
     player.scoreAlignRight = player.side === 'R';
   }
