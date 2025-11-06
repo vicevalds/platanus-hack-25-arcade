@@ -870,7 +870,7 @@ function update(_time, delta) {
     }
     
     // Base health drain rate increases every 5 rounds
-    const baseHealthDrainRate = 18; // health per second
+    const baseHealthDrainRate = 0; // health per second
     const difficultyTier = Math.floor((currentRound - 1) / 5); // 0, 1, 2, 3... every 5 rounds
     const roundMultiplier = 1 + difficultyTier * 0.1; // +10% every 5 rounds (1.0x, 1.1x, 1.2x...)
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
@@ -1227,13 +1227,40 @@ function drawScore(player) {
   const gfx = player.scoreGfx;
   gfx.clear();
   const text = String(player.score || 0);
-  const ps = 5;
+  
+  // In two player mode, check if this player is winning
+  let isWinning = false;
+  let basePs = 5;
+  let color = 0xffff66; // Default yellow
+  
+  if (gameMode === 'twoPlayer' && gameState === 'playing') {
+    const p1Score = p1.score || 0;
+    const p2Score = p2.score || 0;
+    
+    // Check if this player is winning (has more points)
+    if (player === p1 && p1Score > p2Score) {
+      isWinning = true;
+    } else if (player === p2 && p2Score > p1Score) {
+      isWinning = true;
+    }
+    
+    if (isWinning) {
+      basePs = Math.floor(5 * 1.3); // 1.3x larger (6.5 -> 6 pixels)
+      color = 0xffff00; // Bright yellow
+    } else {
+      // Not winning: normal size and white color
+      basePs = 5; // Normal size (x1)
+      color = 0xffffff; // White
+    }
+  }
+  
+  const ps = basePs;
   const gap = 2;
   const digitW = 3 * ps;
   const totalW = text.length * digitW + (text.length - 1) * gap;
   let x = player.scoreAlignRight ? (player.scoreAnchor.x - totalW) : player.scoreAnchor.x;
   const y = player.scoreAnchor.y;
-  gfx.fillStyle(0xffff66, 1);
+  gfx.fillStyle(color, 1);
   for (let i = 0; i < text.length; i++) {
     const d = DIGITS[text[i]];
     for (let r = 0; r < d.length; r++) {
