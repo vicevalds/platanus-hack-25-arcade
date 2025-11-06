@@ -287,6 +287,13 @@ const DIGITS = {
     [1,1,1],
     [1,1,0],
     [1,0,1]
+  ],
+  'X': [
+    [1,0,1],
+    [0,1,0],
+    [0,1,0],
+    [0,1,0],
+    [1,0,1]
   ]
 };
 
@@ -404,13 +411,51 @@ function playErrorSound() {
   setTimeout(() => playTone(200, 0.15, 'sawtooth', 0.2), 100);
 }
 
-function playSuccessSound() {
+function playSuccessSound(combo = 0) {
   if (!audioContext) initAudio();
   
-  // Ascending arpeggio
-  playTone(523, 0.08, 'square', 0.15); // C5
-  setTimeout(() => playTone(659, 0.08, 'square', 0.15), 80); // E5
-  setTimeout(() => playTone(784, 0.15, 'square', 0.15), 160); // G5
+  // Special glorious sound for combo x8
+  if (combo >= 8) {
+    // Glorious fanfare: 5 notes for maximum epicness
+    // C5, E5, G5, C6, E6 (extended arpeggio)
+    const gloriousFreqs = [523, 659, 784, 1047, 1319]; // C5, E5, G5, C6, E6
+    const volume = 0.15 * 1.3; // High volume for combo x8
+    
+    // Play extended arpeggio with slightly longer durations for grandeur
+    playTone(gloriousFreqs[0], 0.1, 'square', volume); // C5
+    setTimeout(() => playTone(gloriousFreqs[1], 0.1, 'square', volume), 90); // E5
+    setTimeout(() => playTone(gloriousFreqs[2], 0.12, 'square', volume), 180); // G5
+    setTimeout(() => playTone(gloriousFreqs[3], 0.15, 'square', volume), 270); // C6 (high note for glory)
+    setTimeout(() => playTone(gloriousFreqs[4], 0.18, 'square', volume), 380); // E6 (highest note for maximum epicness)
+    return;
+  }
+  
+  // Normal success sound for combos < 8
+  // Base frequencies: C5, E5, G5
+  const baseFreqs = [523, 659, 784]; // C5, E5, G5
+  
+  // Calculate pitch shift: each combo increases by a whole tone (2 semitones, up to one octave = 6 whole tones)
+  const wholeTones = Math.min(combo - 1, 6); // Cap at one octave (combo 1 = base, combo 2 = +1 tone, etc.)
+  const semitones = wholeTones * 2; // Convert whole tones to semitones
+  const multiplier = Math.pow(2, semitones / 12); // Exponential frequency multiplier
+  
+  // Calculate volume based on combo
+  let volume;
+  if (combo <= 2) {
+    volume = 0.8;
+  } else if (combo <= 5) {
+    volume = 1.0;
+  } else {
+    volume = 1.3;
+  }
+  
+  // Apply volume multiplier to base volume (0.15)
+  const finalVolume = 0.15 * volume;
+  
+  // Ascending arpeggio with pitch shift
+  playTone(baseFreqs[0] * multiplier, 0.08, 'square', finalVolume); // C5 + shift
+  setTimeout(() => playTone(baseFreqs[1] * multiplier, 0.08, 'square', finalVolume), 80); // E5 + shift
+  setTimeout(() => playTone(baseFreqs[2] * multiplier, 0.15, 'square', finalVolume), 160); // G5 + shift
 }
 
 function playPowerUpSound() {
@@ -870,7 +915,7 @@ function update(_time, delta) {
     }
     
     // Base health drain rate increases every 5 rounds
-    const baseHealthDrainRate = 0; // health per second
+    const baseHealthDrainRate = 18; // health per second
     const difficultyTier = Math.floor((currentRound - 1) / 5); // 0, 1, 2, 3... every 5 rounds
     const roundMultiplier = 1 + difficultyTier * 0.1; // +10% every 5 rounds (1.0x, 1.1x, 1.2x...)
     const healthDrainRate = baseHealthDrainRate * roundMultiplier;
@@ -1013,9 +1058,11 @@ function update(_time, delta) {
     // Update and draw score popups
     updateScorePopups(p1, dt, _time);
     drawScorePopups(p1);
+    drawCombo(p1);
     if (gameMode === 'twoPlayer') {
       updateScorePopups(p2, dt, _time);
       drawScorePopups(p2);
+      drawCombo(p2);
     }
   } else {
     // Hide health bars, patterns, and scores when game is not playing
@@ -1027,6 +1074,8 @@ function update(_time, delta) {
     p2.scoreGfx.clear();
     if (p1.scorePopupGfx) p1.scorePopupGfx.clear();
     if (p2.scorePopupGfx) p2.scorePopupGfx.clear();
+    if (p1.comboGfx) p1.comboGfx.clear();
+    if (p2.comboGfx) p2.comboGfx.clear();
   }
 }
 
@@ -1228,28 +1277,25 @@ function drawScore(player) {
   gfx.clear();
   const text = String(player.score || 0);
   
-  // In two player mode, check if this player is winning
-  let isWinning = false;
-  let basePs = 5;
+  // Base size: 4 for single player, 5 for two player mode (0.1 larger)
+  let basePs = (gameMode === 'twoPlayer') ? 5 : 4; // Larger in two player mode
   let color = 0xffff66; // Default yellow
   
+  // In two player mode only, check if this player is winning
   if (gameMode === 'twoPlayer' && gameState === 'playing') {
     const p1Score = p1.score || 0;
     const p2Score = p2.score || 0;
     
     // Check if this player is winning (has more points)
     if (player === p1 && p1Score > p2Score) {
-      isWinning = true;
+      basePs = Math.floor(5 * 1.3); // 1.3x larger (6.5 -> 6 pixels)
+      color = 0xffff00; // Bright yellow
     } else if (player === p2 && p2Score > p1Score) {
-      isWinning = true;
-    }
-    
-    if (isWinning) {
       basePs = Math.floor(5 * 1.3); // 1.3x larger (6.5 -> 6 pixels)
       color = 0xffff00; // Bright yellow
     } else {
       // Not winning: normal size and white color
-      basePs = 5; // Normal size (x1)
+      basePs = 5; // Normal size (larger in two player mode)
       color = 0xffffff; // White
     }
   }
@@ -1263,6 +1309,56 @@ function drawScore(player) {
   gfx.fillStyle(color, 1);
   for (let i = 0; i < text.length; i++) {
     const d = DIGITS[text[i]];
+    for (let r = 0; r < d.length; r++) {
+      for (let c = 0; c < d[r].length; c++) {
+        if (d[r][c]) gfx.fillRect(x + c * ps, y + r * ps, ps, ps);
+      }
+    }
+    x += digitW + gap;
+  }
+}
+
+function drawCombo(player) {
+  const gfx = player.comboGfx;
+  gfx.clear();
+  
+  // Only show combo if > 0
+  if (!player.combo || player.combo === 0 || gameState !== 'playing') return;
+  
+  const comboText = 'X' + String(player.combo);
+  
+  // Dynamic size based on combo level
+  // Combos x1-x2: 2px, x3-x4: 3px, x5-x6: 4px, x7: 5px, x8: 5px
+  let ps;
+  if (player.combo <= 2) {
+    ps = 2; // Combos x1-x2: 2 píxeles
+  } else if (player.combo <= 4) {
+    ps = 3; // Combos x3-x4: 3 píxeles
+  } else if (player.combo <= 6) {
+    ps = 4; // Combos x5-x6: 4 píxeles
+  } else {
+    ps = 5; // Combo x7 y x8: 5 píxeles
+  }
+  
+  const gap = 1;
+  const digitW = 3 * ps;
+  const totalW = comboText.length * digitW + (comboText.length - 1) * gap;
+  let x = player.scoreAlignRight ? (player.comboAnchor.x - totalW) : player.comboAnchor.x;
+  const y = player.comboAnchor.y;
+  
+  // Color based on combo level
+  let color = 0x00ff00; // Green for low combos
+  if (player.combo >= 6) {
+    color = 0xff00ff; // Magenta for high combos
+  } else if (player.combo >= 3) {
+    color = 0x00ffff; // Cyan for medium combos
+  }
+  
+  gfx.fillStyle(color, 1);
+  for (let i = 0; i < comboText.length; i++) {
+    const char = comboText[i];
+    const d = DIGITS[char];
+    if (!d) continue;
     for (let r = 0; r < d.length; r++) {
       for (let c = 0; c < d[r].length; c++) {
         if (d[r][c]) gfx.fillRect(x + c * ps, y + r * ps, ps, ps);
@@ -1431,6 +1527,7 @@ function initPlayerUI(scene, player, side) {
   player.patternErrors = 0; // Track errors in current pattern
   player.scorePopups = []; // Array of active score popups {amount, x, y, life, maxLife}
   player.pendingScore = 0; // Points accumulated during current pattern (not yet added to total)
+  player.combo = 0; // Combo counter
   player.healthGfx = scene.add.graphics();
   player.healthGfx.setDepth(50); // Above arena (10) but below players (100)
   player.patternText = scene.add.text(0, 0, '', {
@@ -1444,10 +1541,13 @@ function initPlayerUI(scene, player, side) {
   player.scoreGfx.setDepth(50); // Above arena (10) but below players (100)
   player.scorePopupGfx = scene.add.graphics();
   player.scorePopupGfx.setDepth(60); // Above score
+  player.comboGfx = scene.add.graphics();
+  player.comboGfx.setDepth(50); // Same depth as score
   
   // Set score position (will be updated in positionUI for single player)
   player.scoreAnchor = { x: side === 'L' ? 20 : 780, y: 65 }; // Moved down to y: 65 to avoid health bar
   player.scoreAlignRight = side === 'R';
+  player.comboAnchor = { x: side === 'L' ? 20 : 780, y: 105 }; // Below score (more spacing)
   
   // fixed positions at the top of each half
   positionUI(player);
@@ -1462,7 +1562,7 @@ function makePattern() {
   if (round <= 10) {
     // Rondas 1-10: 80% de 3 símbolos, 20% de 4 símbolos
     if (rand < 0.80) {
-      len = 3;
+      len = 7;// ACA
     } else {
       len = 4;
     }
@@ -1572,16 +1672,54 @@ function tryStep(player, input) {
         totalEarned += 10; // Bonus for perfect completion
       }
       
+      // Calculate combo multiplier based on current combo
+      // Only apply multiplier if pattern completed without errors
+      let comboMultiplier = 1.0;
+      if (player.patternErrors === 0 && player.combo > 0) {
+        const combo = player.combo;
+        if (combo >= 8) {
+          comboMultiplier = 2.0; // x8+: 2.0x
+        } else if (combo === 7) {
+          comboMultiplier = 1.7; // x7: 1.7x
+        } else if (combo === 6) {
+          comboMultiplier = 1.6; // x6: 1.6x
+        } else if (combo === 5) {
+          comboMultiplier = 1.5; // x5: 1.5x
+        } else if (combo === 4) {
+          comboMultiplier = 1.4; // x4: 1.4x
+        } else if (combo === 3) {
+          comboMultiplier = 1.2; // x3: 1.2x
+        } else if (combo === 2) {
+          comboMultiplier = 1.1; // x2: 1.1x
+        } else {
+          comboMultiplier = 1.0; // x1: 1.0x
+        }
+      }
+      
+      // Apply multiplier to points earned
+      totalEarned = Math.round(totalEarned * comboMultiplier);
+      
       // Add all earned points to total score
       player.score += totalEarned;
       
-      // Show popup with total earned points
+      // Show popup with total earned points (after multiplier)
       showScorePopup(player, totalEarned, sceneRef.time.now);
       
-      // Play success sound
-      playSuccessSound();
-      // Recover 50% of max health when completing pattern (capped at max health)
-      player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.5);
+      // Increment combo if pattern completed without errors
+      if (player.patternErrors === 0) {
+        player.combo++;
+      } else {
+        player.combo = 0; // Reset combo if there were errors
+      }
+      
+      // Play success sound with combo
+      playSuccessSound(player.combo);
+      
+      // Recover health when completing pattern (capped at max health)
+      // Base recovery: 50% of max health, multiplied by combo multiplier
+      const baseHealthRecovery = player.maxHealth * 0.5;
+      const healthRecovery = baseHealthRecovery * comboMultiplier;
+      player.health = Math.min(player.maxHealth, player.health + healthRecovery);
       const completed = player.pattern.slice();
       // spawn attacks on opponent half
       // In single player mode, spawn projectiles targeting the same player
@@ -1602,12 +1740,14 @@ function tryStep(player, input) {
     player.score = Math.max(0, player.score - 10);
     showScorePopup(player, -10, sceneRef.time.now);
     player.patternErrors++; // Track error
+    player.combo = 0; // Reset combo on mistake
     player.progress = 0;
     player.wildcardDirections = []; // Reset on mistake
     player.pendingScore = 0; // Lose all pending points on mistake
   }
   refreshPatternTexts(player);
   drawScore(player);
+  drawCombo(player);
 }
 
 function positionUI(player) {
@@ -1622,11 +1762,14 @@ function positionUI(player) {
     centerX = 400; // center of screen
     // Also adjust the score position for single player
     player.scoreAnchor = { x: 20, y: 65 }; // Moved down to avoid health bar
+    player.comboAnchor = { x: 20, y: 105 }; // Below score (more spacing)
     player.scoreAlignRight = false;
   } else {
-    centerX = player.side === 'L' ? 200 : 600;
-    // Reset score position for two player mode (moved down to avoid health bar)
-    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: 65 };
+    // Move health bar and pattern more toward center to avoid overlap with high scores and long patterns
+    centerX = player.side === 'L' ? 240 : 560; // Moved toward center (was 200/600)
+    // In two player mode: score at same height as health bar, combo at old score height
+    player.scoreAnchor = { x: player.side === 'L' ? 20 : 780, y: 35 }; // Same height as health bar
+    player.comboAnchor = { x: player.side === 'L' ? 20 : 780, y: 65 }; // At old score height
     player.scoreAlignRight = player.side === 'R';
   }
   
@@ -1638,6 +1781,7 @@ function positionUI(player) {
     drawScore(player);
     drawHealthBar(player);
     drawPatternUI(player);
+    drawCombo(player);
   }
 }
 
@@ -2374,13 +2518,15 @@ function startGame() {
   p2.scorePopups = [];
   p1.pendingScore = 0;
   p2.pendingScore = 0;
+  p1.combo = 0;
+  p2.combo = 0;
   
   // Reset power-up system
   activePowerUpType = null;
-  nextPowerUpSpawnAt = sceneRef.time.now + (5000 + Math.random() * 3000); // First spawn in 5-8s for single player
+  nextPowerUpSpawnAt = sceneRef.time.now + getPowerUpSpawnTime(); // First spawn time based on current round
   // Initialize independent timers for two player mode
-  nextPowerUpP1At = sceneRef.time.now + (5000 + Math.random() * 3000);
-  nextPowerUpP2At = sceneRef.time.now + (5000 + Math.random() * 3000);
+  nextPowerUpP1At = sceneRef.time.now + getPowerUpSpawnTime();
+  nextPowerUpP2At = sceneRef.time.now + getPowerUpSpawnTime();
   
   // Position players based on mode
   if (gameMode === 'singlePlayer') {
@@ -2489,13 +2635,15 @@ function restartGame() {
   p2.scorePopups = [];
   p1.pendingScore = 0;
   p2.pendingScore = 0;
+  p1.combo = 0;
+  p2.combo = 0;
   
   // Reset power-up system
   activePowerUpType = null;
-  nextPowerUpSpawnAt = sceneRef.time.now + (5000 + Math.random() * 3000); // First spawn in 5-8s for single player
+  nextPowerUpSpawnAt = sceneRef.time.now + getPowerUpSpawnTime(); // First spawn time based on current round
   // Initialize independent timers for two player mode
-  nextPowerUpP1At = sceneRef.time.now + (5000 + Math.random() * 3000);
-  nextPowerUpP2At = sceneRef.time.now + (5000 + Math.random() * 3000);
+  nextPowerUpP1At = sceneRef.time.now + getPowerUpSpawnTime();
+  nextPowerUpP2At = sceneRef.time.now + getPowerUpSpawnTime();
   projL = [];
   projR = [];
   shieldP1 = null;
@@ -2652,6 +2800,23 @@ function getPlayerColor(player, now) {
   return player.color;
 }
 
+function getPowerUpSpawnTime() {
+  // Base spawn time: 5-8 seconds
+  // Decrease spawn time as rounds increase (more frequent power-ups)
+  const baseMin = 5000; // 5 seconds
+  const baseMax = 8000; // 8 seconds
+  const baseRange = baseMax - baseMin; // 3000ms
+  
+  // Reduce spawn time by 5% per round (minimum 50% of original time)
+  const reductionFactor = Math.max(0.5, 1 - (currentRound - 1) * 0.05);
+  
+  const minTime = baseMin * reductionFactor;
+  const maxTime = baseMax * reductionFactor;
+  const range = maxTime - minTime;
+  
+  return minTime + Math.random() * range;
+}
+
 function updateShieldP1(now) {
   // Count active power-ups for P1 only in two player mode
   const activePowerUpsP1 = (gameMode === 'twoPlayer') ? 
@@ -2668,13 +2833,13 @@ function updateShieldP1(now) {
       const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
       if (randomType === 'shield') {
         spawnShieldP1(now);
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpP1At = now + getPowerUpSpawnTime(); // respawn time based on current round
       } else if (randomType === 'buk') {
         spawnBukP1(now);
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else if (randomType === 'aws') {
         spawnAwsP1(now);
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       }
     } else if (gameMode === 'singlePlayer' && activePowerUpsP1 < 2 && now >= spawnTimer) {
       // Single player mode: use global system
@@ -2682,15 +2847,15 @@ function updateShieldP1(now) {
       if (randomType === 'shield') {
         spawnShieldP1(now);
         activePowerUpType = 'shield';
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       } else if (randomType === 'buk') {
         spawnBukP1(now);
         activePowerUpType = 'buk';
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       } else if (randomType === 'aws') {
         spawnAwsP1(now);
         activePowerUpType = 'aws';
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
     }
   }
@@ -2703,10 +2868,10 @@ function updateShieldP1(now) {
       shieldP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else if (activePowerUpsP1 <= 1) {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
       return;
     }
@@ -2766,10 +2931,10 @@ function updateShieldP1(now) {
       shieldP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else if (activePowerUpsP1 <= 1) {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
     }
   }
@@ -2786,13 +2951,13 @@ function updateShieldP2(now) {
       const randomType = ['shield', 'buk', 'aws'][Math.floor(Math.random() * 3)];
       if (randomType === 'shield') {
         spawnShieldP2(now);
-        nextPowerUpP2At = now + (5000 + Math.random() * 3000); // respawn in 5-8s
+        nextPowerUpP2At = now + getPowerUpSpawnTime(); // respawn in 5-8s
       } else if (randomType === 'buk') {
         spawnBukP2(now);
-        nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP2At = now + getPowerUpSpawnTime();
       } else if (randomType === 'aws') {
         spawnAwsP2(now);
-        nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP2At = now + getPowerUpSpawnTime();
       }
     }
   }
@@ -2803,7 +2968,7 @@ function updateShieldP2(now) {
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       shieldP2 = null;
-      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      nextPowerUpP2At = now + getPowerUpSpawnTime();
       return;
     }
 
@@ -2860,7 +3025,7 @@ function updateShieldP2(now) {
       drawHealthBar(p2);
       drawScore(p2);
       shieldP2 = null;
-      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      nextPowerUpP2At = now + getPowerUpSpawnTime();
     }
   }
 }
@@ -2875,10 +3040,10 @@ function updateBukP1(now) {
       bukP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
       return;
     }
@@ -2915,10 +3080,10 @@ function updateBukP1(now) {
       bukP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
     }
   }
@@ -2932,7 +3097,7 @@ function updateBukP2(now) {
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       bukP2 = null;
-      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      nextPowerUpP2At = now + getPowerUpSpawnTime();
       return;
     }
 
@@ -2966,7 +3131,7 @@ function updateBukP2(now) {
       showScorePopup(p2, 20, now);
       drawScore(p2);
       bukP2 = null;
-      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      nextPowerUpP2At = now + getPowerUpSpawnTime();
     }
   }
 }
@@ -3026,10 +3191,10 @@ function updateAwsP1(now) {
       awsP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
       return;
     }
@@ -3077,10 +3242,10 @@ function updateAwsP1(now) {
       awsP1 = null;
       // Reset timer based on game mode
       if (gameMode === 'twoPlayer') {
-        nextPowerUpP1At = now + (5000 + Math.random() * 3000);
+        nextPowerUpP1At = now + getPowerUpSpawnTime();
       } else {
         activePowerUpType = null;
-        nextPowerUpSpawnAt = now + (5000 + Math.random() * 3000);
+        nextPowerUpSpawnAt = now + getPowerUpSpawnTime();
       }
     }
   }
@@ -3094,7 +3259,7 @@ function updateAwsP2(now) {
     // Check if power-up has expired (5 seconds)
     if (timeAlive > 5000) {
       awsP2 = null;
-      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      nextPowerUpP2At = now + getPowerUpSpawnTime();
       return;
     }
 
@@ -3139,7 +3304,7 @@ function updateAwsP2(now) {
       drawScore(p2);
       
       awsP2 = null;
-      nextPowerUpP2At = now + (5000 + Math.random() * 3000);
+      nextPowerUpP2At = now + getPowerUpSpawnTime();
     }
   }
 }
