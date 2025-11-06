@@ -1136,9 +1136,10 @@ function update(_time, delta) {
     const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.3; // +0.4 per round
     
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
+    // When idle, multiplier is 1.8x base speed
     const baseMultiplier = 1.0;
-    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.2 : baseMultiplier;
-    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.2 : baseMultiplier;
+    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.1 : baseMultiplier * 1.8;
+    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.1 : baseMultiplier * 1.8;
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
     if (gameMode === 'twoPlayer') {
