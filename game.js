@@ -1499,10 +1499,11 @@ function update(_time, delta) {
   // P1 (mago): piel, azul, café
   const p1Color = getPlayerColor(p1, _time);
   const p1IsImmune = (p1.immuneUntil && _time < p1.immuneUntil);
-  const p1Blinking = p1IsImmune && (Math.floor(_time / 120) % 2 === 1);
-  const p1HeadColor = p1Blinking ? 0x666666 : 0xffdbac; // piel, o gris si inmune y parpadeando
-  const p1BodyColor = p1Blinking ? 0x666666 : 0x0066ff; // azul, o gris si inmune y parpadeando
-  const p1LegsColor = p1Blinking ? 0x666666 : 0x8b5a2b; // café, o gris si inmune y parpadeando
+  const whitePhase = Math.floor(_time / 120) % 2 === 0;
+  const p1UseWhite = p1IsImmune && whitePhase;
+  const p1HeadColor = p1UseWhite ? 0xffffff : 0xffdbac; // piel u original
+  const p1BodyColor = p1UseWhite ? 0xffffff : 0x0066ff; // azul u original
+  const p1LegsColor = p1UseWhite ? 0xffffff : 0x8b5a2b; // café u original
   drawPixelPerson(gPlayers, p1.x, p1.y, p1.size, p1Color, PERSON_MASK_P1_HEAD, PERSON_MASK_P1_BODY, PERSON_MASK_P1_LEGS, p1HeadColor, p1BodyColor, p1LegsColor);
   
   // Draw shield around P1 if active
@@ -1514,10 +1515,10 @@ function update(_time, delta) {
   if (gameMode === 'twoPlayer') {
     const p2Color = getPlayerColor(p2, _time);
     const p2IsImmune = (p2.immuneUntil && _time < p2.immuneUntil);
-    const p2Blinking = p2IsImmune && (Math.floor(_time / 120) % 2 === 1);
-    const p2HeadColor = p2Blinking ? 0x666666 : 0xf0f0f0; // blanco/gris claro
-    const p2BodyColor = p2Blinking ? 0x666666 : 0x8b5a2b; // amarillo
-    const p2LegsColor = p2Blinking ? 0x666666 : 0x888888; // gris oscuro
+    const p2UseWhite = p2IsImmune && whitePhase;
+    const p2HeadColor = p2UseWhite ? 0xffffff : 0xf0f0f0; // blanco original
+    const p2BodyColor = p2UseWhite ? 0xffffff : 0x8b5a2b; // cuerpo original
+    const p2LegsColor = p2UseWhite ? 0xffffff : 0x888888; // piernas originales
     drawPixelPerson(gPlayers, p2.x, p2.y, p2.size, p2Color, PERSON_MASK_P2_HEAD, PERSON_MASK_P2_BODY, PERSON_MASK_P2_LEGS, p2HeadColor, p2BodyColor, p2LegsColor);
     
     // Draw shield around P2 if active
@@ -3418,7 +3419,7 @@ function returnToMenu() {
 
 function getPlayerColor(player, now) {
   if (player.immuneUntil && now < player.immuneUntil) {
-    return (Math.floor(now / 120) % 2 === 0) ? player.color : 0x666666;
+    return (Math.floor(now / 120) % 2 === 0) ? 0xffffff : player.color;
   }
   return player.color;
 }
