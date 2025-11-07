@@ -49,9 +49,14 @@ let roundChangeTime = 0; // timestamp when round changed (for animation)
 let gameMode = 'twoPlayer'; // 'singlePlayer' or 'twoPlayer'
 let menuSelection = 0; // 0 = single player, 1 = two player
 let gameOverSelection = 0; // 0 = restart, 1 = back to menu
+let lbState = null;
+const NAME_CHARS = 'abcdefghijklmnñopqrstuvwxyz';
+let nameEntry = null;
+let pName = '';
+let pScore = 0;
 
 // Test mode: set to true to complete patterns with just the first symbol
-const testMode = true;
+const testMode = false;
 
 // Audio variables
 let audioContext;
@@ -803,6 +808,263 @@ function stopMusic() {
   currentMusic = null;
 }
 
+function getLB() {
+  try {
+    const s = localStorage.getItem('ebLB');
+    return s ? JSON.parse(s) : [];
+  } catch (e) { return []; }
+}
+
+function saveLB(s) {
+  try { localStorage.setItem('ebLB', JSON.stringify(s)); } catch (e) {}
+}
+
+function addLB(n, sc) {
+  let s = getLB();
+  s.push({ name: n.substring(0, 4).toUpperCase(), score: sc });
+  s.sort((a, b) => b.score - a.score);
+  saveLB(s.slice(0, 10));
+}
+
+function isTop10(sc) {
+  const s = getLB();
+  return s.length < 10 || sc > s[9].score;
+}
+
+function showName(sc) {
+  if (!sceneRef) return;
+  lbState = 'enteringName';
+  nameEntry = {
+    letters: ['a', 'a', 'a', 'a'],
+    index: 0
+  };
+  pName = nameEntry.letters.join('');
+  pScore = sc;
+  const g = gameOverText;
+  if (g) Object.values(g).forEach(v => v?.setVisible?.(false));
+  const t = (x, y, txt, sz, cl) => sceneRef.add.text(x, y, txt, { fontSize: sz, fontFamily: 'Arial', color: cl, fontWeight: 'bold' }).setOrigin(0.5).setDepth(2101);
+  const letterTexts = [];
+  const startX = 400 - 120;
+  for (let i = 0; i < 4; i++) {
+    letterTexts.push(sceneRef.add.text(startX + i * 80, 360, 'A', {
+      fontSize: '64px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(2101));
+  }
+  const selectionRect = sceneRef.add.rectangle(letterTexts[0].x, letterTexts[0].y, 72, 86, 0x00ff00, 0.15)
+    .setStrokeStyle(2, 0x00ff00)
+    .setOrigin(0.5)
+    .setDepth(2100);
+  gameOverText.nameInputUI = {
+    inputOverlay: sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.9).setDepth(2100),
+    inputTitle: t(400, 200, 'NEW HIGH SCORE!', '48px', '#00ff00'),
+    inputScore: t(400, 260, 'Score: ' + sc, '32px', '#ffffff'),
+    inputLabel: t(400, 320, 'Set Name (4 chars):', '24px', '#aaaaaa'),
+    letters: letterTexts,
+    selectionRect,
+    inputHint: t(400, 480, 'Stick Up/Down: change letter, Stick left/right: move to letter, Start: save & exit', '20px', '#888888')
+  };
+  updName();
+}
+
+function updName() {
+  if (!nameEntry) return;
+  const ui = gameOverText?.nameInputUI;
+  if (!ui) return;
+  const letters = ui.letters || [];
+  nameEntry.letters.forEach((ch, idx) => {
+    const target = letters[idx];
+    if (target) {
+      target.setText(ch);
+      target.setStyle({ color: idx === nameEntry.index ? '#00ff00' : '#ffffff' });
+    }
+  });
+  if (ui.selectionRect && letters[nameEntry.index]) {
+    ui.selectionRect.setPosition(letters[nameEntry.index].x, letters[nameEntry.index].y);
+  }
+  pName = nameEntry.letters.join('');
+}
+
+function changeNameLetter(delta) {
+  if (!nameEntry) return false;
+  const chars = NAME_CHARS;
+  const idx = nameEntry.index;
+  const current = nameEntry.letters[idx] || chars[0];
+  let pos = chars.indexOf(current);
+  if (pos === -1) pos = 0;
+  pos = ((pos + delta) % chars.length + chars.length) % chars.length;
+  const nextChar = chars.charAt(pos);
+  if (nextChar !== current) {
+    nameEntry.letters[idx] = nextChar;
+    return true;
+  }
+  return false;
+}
+
+function moveNameCursor(delta) {
+  if (!nameEntry) return false;
+  const len = nameEntry.letters.length;
+  if (len === 0) return false;
+  nameEntry.index = ((nameEntry.index + delta) % len + len) % len;
+  return true;
+}
+
+function confirmNameLetter() {
+  if (!nameEntry) return false;
+  const len = nameEntry.letters.length;
+  if (len === 0) return false;
+  nameEntry.index = nameEntry.index === len - 1 ? 0 : nameEntry.index + 1;
+  return true;
+}
+
+function finalizeNameEntry() {
+  if (!nameEntry) return;
+  const finalName = (nameEntry.letters.join('').trim() || 'ANON').substring(0, 4).toUpperCase();
+  addLB(finalName, pScore);
+  hideName();
+  returnToMenu();
+}
+
+function hName(arcadeCode, rawKey) {
+  if (lbState !== 'enteringName' || !nameEntry) return false;
+
+  let handled = false;
+
+  const handleArcade = (code) => {
+    switch (code) {
+      case 'P1U':
+      case 'P2U':
+        handled = changeNameLetter(1) || handled;
+        break;
+      case 'P1D':
+      case 'P2D':
+        handled = changeNameLetter(-1) || handled;
+        break;
+      case 'P1L':
+      case 'P2L':
+        handled = moveNameCursor(-1) || handled;
+        break;
+      case 'P1R':
+      case 'P2R':
+        handled = moveNameCursor(1) || handled;
+        break;
+      case 'P1A':
+      case 'P2A':
+        handled = confirmNameLetter() || handled;
+        break;
+      case 'START1':
+      case 'START2':
+        finalizeNameEntry();
+        handled = true;
+        break;
+      default:
+        break;
+    }
+  };
+
+  if (arcadeCode) {
+    handleArcade(arcadeCode);
+  } else if (rawKey) {
+    switch (rawKey) {
+      case 'ArrowUp':
+      case 'w':
+      case 'W':
+        handled = changeNameLetter(1) || handled;
+        break;
+      case 'ArrowDown':
+      case 's':
+      case 'S':
+        handled = changeNameLetter(-1) || handled;
+        break;
+      case 'ArrowLeft':
+      case 'a':
+      case 'A':
+        handled = moveNameCursor(-1) || handled;
+        break;
+      case 'ArrowRight':
+      case 'd':
+      case 'D':
+        handled = moveNameCursor(1) || handled;
+        break;
+      case ' ':
+      case 'Space':
+        handled = confirmNameLetter() || handled;
+        break;
+      case 'Enter':
+        finalizeNameEntry();
+        handled = true;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (handled && nameEntry) {
+    updName();
+  }
+
+  return handled;
+}
+
+function hideName() {
+  const ui = gameOverText?.nameInputUI;
+  if (!ui) return;
+  if (ui.letters) {
+    ui.letters.forEach(l => l?.destroy?.());
+  }
+  if (ui.selectionRect) ui.selectionRect.destroy();
+  if (ui.inputOverlay) ui.inputOverlay.destroy();
+  if (ui.inputTitle) ui.inputTitle.destroy();
+  if (ui.inputScore) ui.inputScore.destroy();
+  if (ui.inputLabel) ui.inputLabel.destroy();
+  if (ui.inputHint) ui.inputHint.destroy();
+  gameOverText.nameInputUI = null;
+  lbState = null;
+  nameEntry = null;
+  const g = gameOverText;
+  if (g) Object.values(g).forEach(v => v?.setVisible?.(true));
+}
+
+function setMenuVis(v) {
+  if (!menuUI) return;
+  Object.values(menuUI).forEach(u => u?.setVisible?.(v));
+}
+
+function showLB() {
+  if (!sceneRef) return;
+  lbState = 'showing';
+  const s = getLB();
+  if (gameState === 'menu') setMenuVis(false);
+  const t = (x, y, txt, sz, cl) => sceneRef.add.text(x, y, txt, { fontSize: sz, fontFamily: 'Arial', color: cl, fontWeight: 'bold' }).setOrigin(0.5).setDepth(2101);
+  const items = [];
+  for (let i = 0; i < 10; i++) {
+    const txt = i < s.length ? `${(i+1).toString().padStart(2,'0')}. ${s[i].name.padEnd(4,' ')}  ${s[i].score.toString().padStart(6,'0')}` : `${(i+1).toString().padStart(2,'0')}. ---- 0000`;
+    items.push(t(400, 200 + i * 35, txt, '24px', i < s.length ? '#ffffff' : '#666666'));
+  }
+  if (!gameOverText) gameOverText = {};
+  gameOverText.leaderboardUI = {
+    lbOverlay: sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.85).setDepth(2100),
+    lbTitle: t(400, 120, 'LEADERBOARD', '48px', '#E8AE32'),
+    lbItems: items,
+    lbHint: t(400, 560, 'Press ENTER to continue', '20px', '#888888')
+  };
+}
+
+function hideLB() {
+  const ui = gameOverText?.leaderboardUI;
+  if (!ui) return;
+  if (ui.lbItems) ui.lbItems.forEach(i => i.destroy());
+  [ui.lbOverlay, ui.lbTitle, ui.lbHint].forEach(v => v?.destroy());
+  gameOverText.leaderboardUI = null;
+  lbState = null;
+  if (gameState === 'menu') {
+    setMenuVis(true);
+    if (gameOverText && !gameOverText.overlay && !gameOverText.gameOverTitle) gameOverText = null;
+  }
+}
+
 function create() {
   sceneRef = this; // store scene reference
   g = this.add.graphics();
@@ -870,43 +1132,66 @@ function create() {
     }
     
     if (gameState === 'menu') {
-      // Navigate menu with Up/Down
-      if (arcadeCode === 'P1U' || arcadeCode === 'P2U') {
-        menuSelection = (menuSelection - 1 + 2) % 2;
-        updateMenuSelection();
-        return;
-      }
-      if (arcadeCode === 'P1D' || arcadeCode === 'P2D') {
-        menuSelection = (menuSelection + 1) % 2;
-        updateMenuSelection();
-        return;
-      }
-      // Start game with START buttons or Enter
-      if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
-        gameMode = menuSelection === 0 ? 'singlePlayer' : 'twoPlayer';
-        startGame();
-        return;
+      if (lbState === 'showing') {
+        if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
+          hideLB();
+          return;
+        }
+      } else {
+        if (arcadeCode === 'P1U' || arcadeCode === 'P2U') {
+          menuSelection = (menuSelection - 1 + 3) % 3;
+          updateMenuSelection();
+          return;
+        }
+        if (arcadeCode === 'P1D' || arcadeCode === 'P2D') {
+          menuSelection = (menuSelection + 1) % 3;
+          updateMenuSelection();
+          return;
+        }
+        if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
+          if (menuSelection === 0) {
+            gameMode = 'singlePlayer';
+            startGame();
+          } else if (menuSelection === 1) {
+            gameMode = 'twoPlayer';
+            startGame();
+          } else {
+            showLB();
+          }
+          return;
+        }
       }
     } else if (gameState === 'gameOver') {
-      // Navigate menu with Up/Down
-      if (arcadeCode === 'P1U' || arcadeCode === 'P2U') {
-        gameOverSelection = (gameOverSelection - 1 + 2) % 2;
-        updateGameOverSelection();
-        return;
-      }
-      if (arcadeCode === 'P1D' || arcadeCode === 'P2D') {
-        gameOverSelection = (gameOverSelection + 1) % 2;
-        updateGameOverSelection();
-        return;
-      }
-      // Select option with START buttons or Enter
-      if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
-        if (gameOverSelection === 0) {
-          restartGame();
-        } else {
-          returnToMenu();
+      if (lbState === 'enteringName') {
+        if (hName(arcadeCode, ev.key)) return;
+      } else if (lbState === 'showing') {
+        if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
+          hideLB();
+          return;
         }
-        return;
+      }
+      // Normal game over menu
+      else {
+        // Navigate menu with Up/Down
+        if (arcadeCode === 'P1U' || arcadeCode === 'P2U') {
+          gameOverSelection = (gameOverSelection - 1 + 2) % 2;
+          updateGameOverSelection();
+          return;
+        }
+        if (arcadeCode === 'P1D' || arcadeCode === 'P2D') {
+          gameOverSelection = (gameOverSelection + 1) % 2;
+          updateGameOverSelection();
+          return;
+        }
+        // Select option with START buttons or Enter
+        if (arcadeCode === 'START1' || arcadeCode === 'START2' || ev.key === 'Enter') {
+          if (gameOverSelection === 0) {
+            restartGame();
+          } else {
+            returnToMenu();
+          }
+          return;
+        }
       }
     }
     
@@ -1128,7 +1413,7 @@ function update(_time, delta) {
     }
     
     // Base health drain rate increases by 0.4 per round (faster progression)
-    const baseHealthDrainRate = 0; // health per second (starting rate)
+    const baseHealthDrainRate = 20; // health per second (starting rate)
     const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.3; // +0.4 per round
     
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
@@ -2623,6 +2908,10 @@ function endGame(winner, loser) {
     }).setOrigin(0.5).setDepth(2001);
     
     gameOverText = { overlay, gameOverTitle, finalScore };
+    
+    if (isTop10(p1.score || 0)) {
+      showName(p1.score || 0);
+    }
   } else {
     // Two player mode: Winner/Loser messages
     const winnerX = winner.side === 'L' ? 200 : 600;
@@ -2735,13 +3024,6 @@ function showMenu() {
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(1501);
   
-  // Description
-  const description = sceneRef.add.text(400, 200, 'Help the wizard defeat the skeletons in an epic battle', {
-    fontSize: '18px',
-    fontFamily: 'Arial',
-    color: '#aaaaaa'
-  }).setOrigin(0.5).setDepth(1501);
-  
   // Single player option
   const singlePlayerText = sceneRef.add.text(400, 310, 'One Player', {
     fontSize: '36px',
@@ -2758,20 +3040,14 @@ function showMenu() {
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(1501);
   
-  // Controls info - In PC
-  const controlsTitle = sceneRef.add.text(400, 560, 'In PC:', {
-    fontSize: '14px',
+  const lbText = sceneRef.add.text(400, 430, 'Leaderboard', {
+    fontSize: '36px',
     fontFamily: 'Arial',
-    color: '#888888'
-  }).setOrigin(0.5).setDepth(1501);
-
-  const controls2 = sceneRef.add.text(400, 580, 'P1: WASD + IJKL | P2: Arrows + TFGH', {
-    fontSize: '14px',
-    fontFamily: 'Arial',
-    color: '#666666'
+    color: '#ffffff',
+    fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(1501);
   
-  menuUI = { menuBg, title, description, singlePlayerText, twoPlayerText, controlsTitle, controls2 };
+  menuUI = { menuBg, title, singlePlayerText, twoPlayerText, leaderboardText: lbText };
   updateMenuSelection();
   
   // Start intro music
@@ -2787,11 +3063,28 @@ function updateMenuSelection() {
     menuUI.singlePlayerText.setFontSize('40px');
     menuUI.twoPlayerText.setColor('#ffffff');
     menuUI.twoPlayerText.setFontSize('36px');
-  } else {
+    if (menuUI.leaderboardText) {
+      menuUI.leaderboardText.setColor('#ffffff');
+      menuUI.leaderboardText.setFontSize('36px');
+    }
+  } else if (menuSelection === 1) {
     menuUI.singlePlayerText.setColor('#ffffff');
     menuUI.singlePlayerText.setFontSize('36px');
     menuUI.twoPlayerText.setColor('#00ff00');
     menuUI.twoPlayerText.setFontSize('40px');
+    if (menuUI.leaderboardText) {
+      menuUI.leaderboardText.setColor('#ffffff');
+      menuUI.leaderboardText.setFontSize('36px');
+    }
+  } else {
+    menuUI.singlePlayerText.setColor('#ffffff');
+    menuUI.singlePlayerText.setFontSize('36px');
+    menuUI.twoPlayerText.setColor('#ffffff');
+    menuUI.twoPlayerText.setFontSize('36px');
+    if (menuUI.leaderboardText) {
+      menuUI.leaderboardText.setColor('#00ff00');
+      menuUI.leaderboardText.setFontSize('40px');
+    }
   }
 }
 
@@ -2822,9 +3115,9 @@ function startGame() {
   if (menuUI) {
     if (menuUI.menuBg) menuUI.menuBg.destroy();
     if (menuUI.title) menuUI.title.destroy();
-    if (menuUI.description) menuUI.description.destroy();
     if (menuUI.singlePlayerText) menuUI.singlePlayerText.destroy();
     if (menuUI.twoPlayerText) menuUI.twoPlayerText.destroy();
+    if (menuUI.leaderboardText) menuUI.leaderboardText.destroy();
     if (menuUI.controlsTitle) menuUI.controlsTitle.destroy();
     if (menuUI.controls2) menuUI.controls2.destroy();
     menuUI = null;
@@ -2943,8 +3236,11 @@ function restartGame() {
     if (gameOverText.loserScoreText) gameOverText.loserScoreText.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
     if (gameOverText.menuText) gameOverText.menuText.destroy();
+    if (gameOverText.nameInputUI) hideName();
+    if (gameOverText.leaderboardUI) hideLB();
     gameOverText = null;
   }
+  lbState = null;
   
   // Start game music
   playGameMusic();
@@ -3047,8 +3343,11 @@ function returnToMenu() {
     if (gameOverText.loserScoreText) gameOverText.loserScoreText.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
     if (gameOverText.menuText) gameOverText.menuText.destroy();
+    if (gameOverText.nameInputUI) hideName();
+    if (gameOverText.leaderboardUI) hideLB();
     gameOverText = null;
   }
+  lbState = null;
   
   // Reset game state FIRST before showing menu
   gameState = 'menu';
