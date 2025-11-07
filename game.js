@@ -276,13 +276,6 @@ const DIGITS = {
     [0,0,1],
     [1,1,1]
   ],
-  ':': [
-    [0],
-    [1],
-    [0],
-    [1],
-    [0]
-  ],
   'R': [
     [1,1,1],
     [1,0,1],
@@ -1379,8 +1372,6 @@ function update(_time, delta) {
   if (gameState === 'playing' && arcadeButtons['P1D']) vy1 += 1;
   if (vx1 !== 0 && vy1 !== 0) { const s = Math.SQRT1_2; vx1 *= s; vy1 *= s; }
   const p1IsMoving = vx1 !== 0 || vy1 !== 0;
-  const prevP1X = p1.x;
-  const prevP1Y = p1.y;
   p1.x += vx1 * speed * dt;
   p1.y += vy1 * speed * dt;
 
@@ -1392,16 +1383,14 @@ function update(_time, delta) {
   if (gameState === 'playing' && arcadeButtons['P2D']) vy2 += 1;
   if (vx2 !== 0 && vy2 !== 0) { const s = Math.SQRT1_2; vx2 *= s; vy2 *= s; }
   const p2IsMoving = vx2 !== 0 || vy2 !== 0;
-  const prevP2X = p2.x;
-  const prevP2Y = p2.y;
   p2.x += vx2 * speed * dt;
   p2.y += vy2 * speed * dt;
 
   // Health drain over time (if playing)
   if (gameState === 'playing') {
-    // Calculate current round based on elapsed time (6 seconds per round)
+    // Calculate current round based on elapsed time (5 seconds per round)
     const elapsedSeconds = (_time - gameStartTime) / 1000;
-    currentRound = Math.floor(elapsedSeconds / 6) + 1;
+    currentRound = Math.floor(elapsedSeconds / 5) + 1;
     
     // Detect round change for animation
     if (currentRound !== previousRound) {
@@ -1413,14 +1402,14 @@ function update(_time, delta) {
     }
     
     // Base health drain rate increases by 0.4 per round (faster progression)
-    const baseHealthDrainRate = 20; // health per second (starting rate)
+    const baseHealthDrainRate = 18; // health per second (starting rate)
     const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.3; // +0.4 per round
     
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
     // When idle, multiplier is 1.8x base speed
     const baseMultiplier = 1.0;
-    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.1 : baseMultiplier * 1.8;
-    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.1 : baseMultiplier * 1.8;
+    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.2 : baseMultiplier * 1.9;
+    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.2 : baseMultiplier * 1.9;
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
     if (gameMode === 'twoPlayer') {
@@ -1916,30 +1905,56 @@ function drawTimer(now) {
       x += d[0].length * ps + 2;
     }
     
-    // Draw countdown timer below round
-    const elapsed = (now - gameStartTime) / 1000;
-    const timeInRound = elapsed % 6;
-    const countdown = Math.max(0, Math.floor(6 - timeInRound));
-    const timeText = String(countdown).padStart(2, '0');
-    
-    // Calculate width for time
-    totalW = 0;
-    for (let i = 0; i < timeText.length; i++) {
-      const d = DIGITS[timeText[i]];
-      totalW += d[0].length * 5 + 2; // ps=5, gap=2
-    }
-    
+    // Draw total elapsed time (ascending) in vertical layout
+    const elapsedTotal = Math.max(0, Math.floor((now - gameStartTime) / 1000));
+    const totalMinutes = Math.floor(elapsedTotal / 60);
+    const totalSeconds = elapsedTotal % 60;
+    const minutesText = String(totalMinutes).padStart(2, '0');
+    const secondsText = String(totalSeconds).padStart(2, '0');
+
+    const timeScale = 0.9; // 10% smaller than previous
+    const timePs = 5 * timeScale;
+    const timeGap = 2 * timeScale;
+
+    const computeWidth = (text) => {
+      let width = 0;
+      for (let i = 0; i < text.length; i++) {
+        const d = DIGITS[text[i]];
+        width += d[0].length * timePs;
+        if (i < text.length - 1) width += timeGap;
+      }
+      return width;
+    };
+
+    const minutesWidth = computeWidth(minutesText);
+    const minutesX = roundX - minutesWidth;
+    const minutesY = 45;
+
     timerGfx.fillStyle(0xffffff, 1);
-    x = roundX - totalW;
-    const timeY = 45;
-    for (let i = 0; i < timeText.length; i++) {
-      const d = DIGITS[timeText[i]];
+    let drawX = minutesX;
+    for (let i = 0; i < minutesText.length; i++) {
+      const d = DIGITS[minutesText[i]];
       for (let r = 0; r < d.length; r++) {
         for (let c = 0; c < d[r].length; c++) {
-          if (d[r][c]) timerGfx.fillRect(x + c * 5, timeY + r * 5, 5, 5);
+          if (d[r][c]) timerGfx.fillRect(drawX + c * timePs, minutesY + r * timePs, timePs, timePs);
         }
       }
-      x += d[0].length * 5 + 2;
+      drawX += d[0].length * timePs + timeGap;
+    }
+
+    const digitHeight = DIGITS['0'].length * timePs;
+    const secondsWidth = computeWidth(secondsText);
+    const secondsX = minutesX + (minutesWidth - secondsWidth) / 2;
+    const secondsY = minutesY + digitHeight + 8;
+    drawX = secondsX;
+    for (let i = 0; i < secondsText.length; i++) {
+      const d = DIGITS[secondsText[i]];
+      for (let r = 0; r < d.length; r++) {
+        for (let c = 0; c < d[r].length; c++) {
+          if (d[r][c]) timerGfx.fillRect(drawX + c * timePs, secondsY + r * timePs, timePs, timePs);
+        }
+      }
+      drawX += d[0].length * timePs + timeGap;
     }
   } else {
     // Two player mode: draw centered with animation
@@ -1970,12 +1985,23 @@ function drawTimer(now) {
       x += d[0].length * ps + 2;
     }
     
-    // Draw countdown timer
-    const elapsed = (now - gameStartTime) / 1000;
-    const timeInRound = elapsed % 6;
-    const countdown = Math.max(0, Math.floor(6 - timeInRound));
-    const text = String(countdown).padStart(2, '0');
-    drawDigitsCentered(timerGfx, 400, 35, text, 0xffffff, 5, 2);
+    // Draw total elapsed time (ascending) in vertical layout
+    const elapsedTotal = Math.max(0, Math.floor((now - gameStartTime) / 1000));
+    const totalMinutes = Math.floor(elapsedTotal / 60);
+    const totalSeconds = elapsedTotal % 60;
+    const minutesText = String(totalMinutes).padStart(2, '0');
+    const secondsText = String(totalSeconds).padStart(2, '0');
+
+    const timeScale = 0.9;
+    const timePs = 5 * timeScale;
+    const timeGap = 2 * timeScale;
+    const digitHeight = DIGITS['0'].length * timePs;
+
+    timerGfx.fillStyle(0xffffff, 1);
+    drawDigitsCentered(timerGfx, 400, 35, minutesText, 0xffffff, timePs, timeGap);
+
+    const secondsY = 35 + digitHeight + 8;
+    drawDigitsCentered(timerGfx, 400, secondsY, secondsText, 0xffffff, timePs, timeGap);
   }
 }
 
