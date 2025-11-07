@@ -853,11 +853,11 @@ function showName(sc) {
   gameOverText.nameInputUI = {
     inputOverlay: sceneRef.add.rectangle(400, 300, 800, 600, 0x000000, 0.9).setDepth(2100),
     inputTitle: t(400, 200, 'NEW HIGH SCORE!', '48px', '#00ff00'),
-    inputScore: t(400, 260, 'Score: ' + sc, '32px', '#ffffff'),
+    inputScore: t(400, 260, sc, '32px', '#ffffff'),
     inputLabel: t(400, 320, 'Set Name (4 chars):', '24px', '#aaaaaa'),
     letters: letterTexts,
     selectionRect,
-    inputHint: t(400, 480, 'Stick Up/Down: change letter, Stick left/right: move to letter, Start: save & exit', '20px', '#888888')
+    inputHint: t(400, 480, 'Stick Up/Down/left/right: change letter, Start: Save & exit', '20px', '#888888')
   };
   updName();
 }
@@ -2927,7 +2927,7 @@ function endGame(winner, loser) {
     }).setOrigin(0.5).setDepth(2001);
     
     // Show score
-    const finalScore = sceneRef.add.text(400, 260, 'Final Score: ' + (p1.score || 0), {
+    const finalScore = sceneRef.add.text(400, 260, + (p1.score || 0), {
       fontSize: '40px',
       fontFamily: 'Arial',
       color: '#ffffff',
@@ -2952,7 +2952,7 @@ function endGame(winner, loser) {
     }).setOrigin(0.5).setDepth(2001);
     
     // Winner score below WINNER text
-    const winnerScoreText = sceneRef.add.text(winnerX, 260, 'Score: ' + (winner.score || 0), {
+    const winnerScoreText = sceneRef.add.text(winnerX, 260, + (winner.score || 0), {
       fontSize: '32px',
       fontFamily: 'Arial',
       color: '#88ff88',
@@ -2967,7 +2967,7 @@ function endGame(winner, loser) {
     }).setOrigin(0.5).setDepth(2001);
     
     // Loser score below LOSER text
-    const loserScoreText = sceneRef.add.text(loserX, 260, 'Score: ' + (loser.score || 0), {
+    const loserScoreText = sceneRef.add.text(loserX, 260, + (loser.score || 0), {
       fontSize: '32px',
       fontFamily: 'Arial',
       color: '#ff8888',
