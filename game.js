@@ -1120,7 +1120,7 @@ function update(_time, delta) {
     
     // Base health drain rate increases by 0.4 per round (faster progression)
     const baseHealthDrainRate = 18; // health per second (starting rate)
-    const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.3; // +0.4 per round
+    const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.15; // +0.4 per round
     
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
     // When idle, multiplier is 1.8x base speed
@@ -1722,6 +1722,13 @@ function drawTimer(now) {
   }
 }
 
+function formatElapsedLabel(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+}
+
 function initPlayerUI(scene, player, side) {
   player.score = 0;
   player.progress = 0;
@@ -1935,23 +1942,23 @@ function tryStep(player, input) {
       
       // Recover health when completing pattern (capped at max health)
       // Health recovery percentage based on combo level
-      let healthRecoveryPercent = 0.4; // Default: 40% for combo x1
+      let healthRecoveryPercent = 0.5; // Default: 40% for combo x1
       if (player.combo >= 8) {
-        healthRecoveryPercent = 0.70; // x8+: 70%
+        healthRecoveryPercent = 0.80; // x8+: 70%
       } else if (player.combo === 7) {
-        healthRecoveryPercent = 0.65; // x7: 65%
+        healthRecoveryPercent = 0.75; // x7: 65%
       } else if (player.combo === 6) {
-        healthRecoveryPercent = 0.60; // x6: 60%
+        healthRecoveryPercent = 0.70; // x6: 60%
       } else if (player.combo === 5) {
-        healthRecoveryPercent = 0.55; // x5: 55%
+        healthRecoveryPercent = 0.65; // x5: 55%
       } else if (player.combo === 4) {
-        healthRecoveryPercent = 0.50; // x4: 50%
+        healthRecoveryPercent = 0.60; // x4: 50%
       } else if (player.combo === 3) {
-        healthRecoveryPercent = 0.45; // x3: 45%
+        healthRecoveryPercent = 0.55; // x3: 45%
       } else if (player.combo === 2) {
-        healthRecoveryPercent = 0.40; // x2: 40%
+        healthRecoveryPercent = 0.50; // x2: 40%
       } else {
-        healthRecoveryPercent = 0.40; // x1: 40%
+        healthRecoveryPercent = 0.50; // x1: 40%
       }
       
       const healthRecovery = player.maxHealth * healthRecoveryPercent;
@@ -2373,7 +2380,7 @@ function spawnAttackPattern(targetSide, pattern, attacker) {
           const p = createProjectile(targetSide, wildcardDir);
           
           // Wildcard always spawns special projectile (double damage)
-          p.dmg = 2; // Double damage for wildcard
+          p.dmg = 1.8; // Double damage for wildcard
           p.ps = 10;
           
           // In single player mode, always use skeleton design (stone)
@@ -2592,7 +2599,7 @@ function onPlayerHit(player, now, dmg = 1) {
   // Rounds 1-4: 1.0x, Rounds 5-9: 1.1x, Rounds 10-14: 1.2x, etc.
   const difficultyTier = Math.floor((currentRound - 1) / 5); // 0, 1, 2, 3... every 5 rounds
   const roundMultiplier = 1.0 + difficultyTier * 0.1; // +10% every 5 rounds
-  const baseDamage = 22.5; // base damage per hit
+  const baseDamage = 15; // base damage per hit
   const finalDamage = dmg * baseDamage * roundMultiplier;
   
   // Subtract 5 points for taking damage
@@ -2633,6 +2640,7 @@ function endGame(winner, loser) {
   let winnerText = null;
   let loserText = null;
   let gameOverTitle = null;
+  const elapsedLabel = formatElapsedLabel(sceneRef.time.now - gameStartTime);
   
   if (gameMode === 'singlePlayer') {
     // Single player: Game Over message
@@ -2651,7 +2659,14 @@ function endGame(winner, loser) {
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
-    gameOverText = { overlay, gameOverTitle, finalScore };
+    const finalTime = sceneRef.add.text(400, 320, elapsedLabel, {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+
+    gameOverText = { overlay, gameOverTitle, finalScore, timeText: finalTime };
   } else {
     // Two player mode: Winner/Loser messages
     const winnerX = winner.side === 'L' ? 200 : 600;
@@ -2687,11 +2702,18 @@ function endGame(winner, loser) {
       fontWeight: 'bold'
     }).setOrigin(0.5).setDepth(2001);
     
-    gameOverText = { overlay, winnerText, loserText, winnerScoreText, loserScoreText };
+    const timeText = sceneRef.add.text(400, 320, elapsedLabel, {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      fontWeight: 'bold'
+    }).setOrigin(0.5).setDepth(2001);
+
+    gameOverText = { overlay, winnerText, loserText, winnerScoreText, loserScoreText, timeText };
   }
   
   // Restart option (default)
-  const restartText = sceneRef.add.text(400, 360, 'Restart', {
+  const restartText = sceneRef.add.text(400, 430, 'Restart', {
     fontSize: '36px',
     fontFamily: 'Arial',
     color: '#ffffff',
@@ -2699,7 +2721,7 @@ function endGame(winner, loser) {
   }).setOrigin(0.5).setDepth(2001);
   
   // Back to menu option
-  const menuText = sceneRef.add.text(400, 420, 'Back to Menu', {
+  const menuText = sceneRef.add.text(400, 480, 'Back to Menu', {
     fontSize: '36px',
     fontFamily: 'Arial',
     color: '#ffffff',
@@ -2947,6 +2969,7 @@ function restartGame() {
     if (gameOverText.loserScoreText) gameOverText.loserScoreText.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
     if (gameOverText.menuText) gameOverText.menuText.destroy();
+    if (gameOverText.timeText) gameOverText.timeText.destroy();
     gameOverText = null;
   }
   
@@ -3051,6 +3074,7 @@ function returnToMenu() {
     if (gameOverText.loserScoreText) gameOverText.loserScoreText.destroy();
     if (gameOverText.restartText) gameOverText.restartText.destroy();
     if (gameOverText.menuText) gameOverText.menuText.destroy();
+    if (gameOverText.timeText) gameOverText.timeText.destroy();
     gameOverText = null;
   }
   
