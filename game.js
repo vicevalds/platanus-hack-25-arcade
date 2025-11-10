@@ -19,6 +19,7 @@ let p1 = { x: 200, y: 350, size: 24, color: 0x8899ff }; // Initial position in p
 let p2 = { x: 600, y: 350, size: 24, color: 0xf0f0f0 }; // Initial position in playable area
 let arcadeButtons = {}; // tracks arcade button states (e.g., 'P1U': true/false)
 let speed = 440; // px/s (doubled for faster movement)
+const IDLE_MULTIPLIER_DELAY = 300; // milliseconds before idle multiplier applies
 const TOP_UI_HEIGHT = 150; // Height of black top section (non-playable area) - "barra datos"
 const DIRS = ['U','R','D','L'];
 // Button to direction mapping for patterns
@@ -64,6 +65,8 @@ let audioResumeInterval = null;
 let audioResumeAttempts = 0;
 const AUDIO_RESUME_INTERVAL_MS = 400;
 const AUDIO_RESUME_MAX_ATTEMPTS = 75;
+let p1LastMoveTime = 0;
+let p2LastMoveTime = 0;
 
 // Pixel arrow masks (5x5) - blocky style
 const ARROW_U = [
@@ -1158,6 +1161,9 @@ function update(_time, delta) {
   const dt = delta / 1000;
   const half = 400;
 
+  if (p1LastMoveTime === 0) p1LastMoveTime = _time;
+  if (p2LastMoveTime === 0) p2LastMoveTime = _time;
+
   // Animate game over texts (pulsate)
   if (gameState === 'gameOver' && gameOverText) {
     const scale = 1 + Math.sin(_time / 200) * 0.1; // pulsate between 0.9 and 1.1
@@ -1181,6 +1187,9 @@ function update(_time, delta) {
   if (gameState === 'playing' && arcadeButtons['P1D']) vy1 += 1;
   if (vx1 !== 0 && vy1 !== 0) { const s = Math.SQRT1_2; vx1 *= s; vy1 *= s; }
   const p1IsMoving = vx1 !== 0 || vy1 !== 0;
+  if (p1IsMoving) {
+    p1LastMoveTime = _time;
+  }
   p1.x += vx1 * speed * dt;
   p1.y += vy1 * speed * dt;
 
@@ -1192,6 +1201,9 @@ function update(_time, delta) {
   if (gameState === 'playing' && arcadeButtons['P2D']) vy2 += 1;
   if (vx2 !== 0 && vy2 !== 0) { const s = Math.SQRT1_2; vx2 *= s; vy2 *= s; }
   const p2IsMoving = vx2 !== 0 || vy2 !== 0;
+  if (p2IsMoving) {
+    p2LastMoveTime = _time;
+  }
   p2.x += vx2 * speed * dt;
   p2.y += vy2 * speed * dt;
 
@@ -1217,8 +1229,10 @@ function update(_time, delta) {
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
     // When idle, multiplier is 1.8x base speed
     const baseMultiplier = 1.0;
-    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.2 : baseMultiplier * 1.9;
-    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.2 : baseMultiplier * 1.9;
+    const p1IdleElapsed = _time - p1LastMoveTime;
+    const p2IdleElapsed = _time - p2LastMoveTime;
+    const p1DrainMultiplier = p1IsMoving ? baseMultiplier - 0.2 : (p1IdleElapsed >= IDLE_MULTIPLIER_DELAY ? baseMultiplier * 1.9 : baseMultiplier);
+    const p2DrainMultiplier = p2IsMoving ? baseMultiplier - 0.2 : (p2IdleElapsed >= IDLE_MULTIPLIER_DELAY ? baseMultiplier * 1.9 : baseMultiplier);
     
     p1.health = Math.max(0, (p1.health || 0) - healthDrainRate * p1DrainMultiplier * dt);
     if (gameMode === 'twoPlayer') {
@@ -2966,6 +2980,8 @@ function startGame() {
   currentRound = 1; // Reset round
   previousRound = 1; // Reset previous round
   roundChangeTime = 0; // Reset round change time
+  p1LastMoveTime = sceneRef.time.now;
+  p2LastMoveTime = sceneRef.time.now;
   p1.health = p1.maxHealth;
   p2.health = p2.maxHealth;
   p1.score = 0;
