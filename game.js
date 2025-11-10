@@ -1120,7 +1120,7 @@ function update(_time, delta) {
     
     // Base health drain rate increases by 0.4 per round (faster progression)
     const baseHealthDrainRate = 18; // health per second (starting rate)
-    const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.15; // +0.4 per round
+    const healthDrainRate = baseHealthDrainRate + (currentRound - 1) * 1.10; // +0.4 per round
     
     // Base multiplier is 1.0, when moving reduce by 0.2 (0.8 total)
     // When idle, multiplier is 1.8x base speed
@@ -1903,19 +1903,19 @@ function tryStep(player, input) {
       if (player.patternErrors === 0 && player.combo > 0) {
         const combo = player.combo;
         if (combo >= 8) {
-          comboMultiplier = 2.0; // x8+: 2.0x
+          comboMultiplier = 2.4; // x8+: 2.0x
         } else if (combo === 7) {
-          comboMultiplier = 1.7; // x7: 1.7x
+          comboMultiplier = 2.2; // x7: 1.7x
         } else if (combo === 6) {
-          comboMultiplier = 1.6; // x6: 1.6x
+          comboMultiplier = 2.0; // x6: 1.6x
         } else if (combo === 5) {
-          comboMultiplier = 1.5; // x5: 1.5x
+          comboMultiplier = 1.8; // x5: 1.5x
         } else if (combo === 4) {
-          comboMultiplier = 1.4; // x4: 1.4x
+          comboMultiplier = 1.6; // x4: 1.4x
         } else if (combo === 3) {
-          comboMultiplier = 1.2; // x3: 1.2x
+          comboMultiplier = 1.4; // x3: 1.2x
         } else if (combo === 2) {
-          comboMultiplier = 1.1; // x2: 1.1x
+          comboMultiplier = 1.2; // x2: 1.1x
         } else {
           comboMultiplier = 1.0; // x1: 1.0x
         }
