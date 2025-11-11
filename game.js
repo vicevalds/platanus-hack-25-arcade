@@ -2907,8 +2907,14 @@ function showMenu() {
     color: '#ffffff',
     fontWeight: 'bold'
   }).setOrigin(0.5).setDepth(1501);
+
+  const controlsHint = sceneRef.add.text(400, 560, 'Controls  P1: WASD + IJKL   P2: Arrows + TFGH   Start: Enter', {
+    fontSize: '20px',
+    fontFamily: 'Arial',
+    color: '#aaaaaa'
+  }).setOrigin(0.5).setDepth(1501);
  
-  menuUI = { menuBg, title, singlePlayerText, twoPlayerText };
+  menuUI = { menuBg, title, singlePlayerText, twoPlayerText, controlsHint };
   updateMenuSelection();
   
   // Start intro music
@@ -2959,6 +2965,7 @@ function startGame() {
     if (menuUI.twoPlayerText) menuUI.twoPlayerText.destroy();
     if (menuUI.controlsTitle) menuUI.controlsTitle.destroy();
     if (menuUI.controls2) menuUI.controls2.destroy();
+    if (menuUI.controlsHint) menuUI.controlsHint.destroy();
     menuUI = null;
   }
   
